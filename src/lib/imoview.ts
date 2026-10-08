@@ -12,6 +12,8 @@ export interface ImoviewLead {
   tipoImovel?: string;
   bairroInteresse?: string;
   valorInteresse?: string;
+  finalidade?: string;
+  funil?: string;
   diasSemContato: number;
   ultimoHistorico?: string;
   dataUltimoContato?: string;
@@ -54,66 +56,78 @@ export async function getImoviewConfig() {
 // Universal Software / Imoview API standard headers
 function buildHeaders(apiKey: string) {
   return {
-    "Content-Type": "application/json",
     "Accept": "application/json",
-    "chave": apiKey,
-    "Authorization": `Bearer ${apiKey}`,
-    "token": apiKey,
+    "chave": apiKey.trim(),
   };
 }
 
-export async function testImoviewConnection(apiKey: string, baseUrl = "https://api.imoview.com.br"): Promise<{ success: boolean; message: string; data?: any }> {
+// Helper to parse Brazilian date format (DD/MM/YYYY HH:mm:ss or DD/MM/YYYY HH:mm)
+export function parseBrDate(str?: string): Date | null {
+  if (!str) return null;
+  const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (match) {
+    const [, day, month, year, hours, minutes, seconds] = match;
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hours || 0),
+      Number(minutes || 0),
+      Number(seconds || 0)
+    );
+  }
+  const fallback = new Date(str);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
+
+export async function testImoviewConnection(
+  apiKey: string,
+  baseUrl = "https://api.imoview.com.br"
+): Promise<{ success: boolean; message: string; data?: any }> {
   if (!apiKey || apiKey.trim().length === 0) {
     return { success: false, message: "Chave de API do Imoview não informada." };
   }
 
   const cleanBase = baseUrl.replace(/\/$/, "");
-  const headers = buildHeaders(apiKey.trim());
+  const headers = buildHeaders(apiKey);
 
-  // Test standard Imoview endpoints (corretor or atendimento)
-  const candidateEndpoints = [
-    `${cleanBase}/v1/corretor/retornar`,
-    `${cleanBase}/v1/corretores`,
-    `${cleanBase}/v1/atendimento/retornar?limite=1`,
-    `${cleanBase}/corretores`,
-    `${cleanBase}/atendimentos`,
-  ];
+  try {
+    const u = new URL(`${cleanBase}/Atendimento/RetornarAtendimentos`);
+    u.searchParams.set("numeroPagina", "1");
+    u.searchParams.set("numeroRegistros", "1");
+    u.searchParams.set("finalidade", "2"); // Venda
+    u.searchParams.set("fase", "0");
+    u.searchParams.set("situacao", "1");
 
-  for (const url of candidateEndpoints) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(u.toString(), {
+      method: "GET",
+      headers,
+    });
 
-      const res = await fetch(url, {
-        method: "GET",
-        headers,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        const json = await res.json().catch(() => ({}));
-        return {
-          success: true,
-          message: "Conexão estabelecida com sucesso com a API do Imoview!",
-          data: json,
-        };
-      } else if (res.status === 401 || res.status === 403) {
-        return {
-          success: false,
-          message: `Chave de API inválida ou sem permissão (HTTP ${res.status}).`,
-        };
-      }
-    } catch (e: any) {
-      // Continue to next candidate endpoint
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        success: true,
+        message: `Conexão estabelecida com sucesso com a API do Imoview! (${data.quantidade ?? 0} atendimentos ativos no CRM)`,
+        data,
+      };
+    } else if (res.status === 401 || res.status === 403) {
+      return {
+        success: false,
+        message: `Chave de API inválida ou sem permissão de acesso (HTTP ${res.status}). Verifique a chave 'chave'.`,
+      };
+    } else {
+      return {
+        success: false,
+        message: `Servidor do Imoview retornou código HTTP ${res.status}. Verifique se a URL está correta.`,
+      };
     }
+  } catch (e: any) {
+    return {
+      success: false,
+      message: `Erro ao conectar com a API do Imoview: ${e.message}`,
+    };
   }
-
-  return {
-    success: false,
-    message: "Não foi possível validar a chave nos servidores do Imoview. Verifique a URL e sua chave de acesso.",
-  };
 }
 
 export async function fetchImoviewBrokers(): Promise<ImoviewBroker[]> {
@@ -122,32 +136,38 @@ export async function fetchImoviewBrokers(): Promise<ImoviewBroker[]> {
 
   const headers = buildHeaders(config.apiKey);
   const cleanBase = config.baseUrl;
+  const brokersMap = new Map<string, string>();
 
-  const endpoints = [
-    `${cleanBase}/v1/corretor/retornar`,
-    `${cleanBase}/v1/corretores`,
-    `${cleanBase}/corretores`,
-  ];
-
-  for (const url of endpoints) {
+  // Fetch recent pages to extract active brokers
+  for (const finalidade of ["2", "1"]) {
     try {
-      const res = await fetch(url, { method: "GET", headers });
+      const u = new URL(`${cleanBase}/Atendimento/RetornarAtendimentos`);
+      u.searchParams.set("numeroPagina", "1");
+      u.searchParams.set("numeroRegistros", "20");
+      u.searchParams.set("finalidade", finalidade);
+      u.searchParams.set("fase", "0");
+      u.searchParams.set("situacao", "1");
+
+      const res = await fetch(u.toString(), { method: "GET", headers });
       if (res.ok) {
-        const json = await res.json();
-        const list = Array.isArray(json) ? json : json.corretores || json.data || json.lista || [];
-        return list.map((item: any) => ({
-          id: String(item.codigo || item.id || item.codcorretor || ""),
-          nome: item.nome || item.nomecorretor || "Corretor",
-          email: item.email || "",
-          telefone: item.celular || item.telefone || "",
-        }));
+        const data = await res.json();
+        if (data.lista && Array.isArray(data.lista)) {
+          for (const item of data.lista) {
+            if (item.corretor && item.corretorcodigo) {
+              brokersMap.set(String(item.corretorcodigo), String(item.corretor).trim());
+            }
+          }
+        }
       }
     } catch {
-      // ignore
+      // Continue
     }
   }
 
-  return [];
+  return Array.from(brokersMap.entries()).map(([id, nome]) => ({
+    id,
+    nome,
+  }));
 }
 
 export async function fetchImoviewStalledLeads(options: {
@@ -158,7 +178,7 @@ export async function fetchImoviewStalledLeads(options: {
 }): Promise<ImoviewLead[]> {
   const config = await getImoviewConfig();
   const minDays = options.diasSemContato ?? 7;
-  const limite = options.limite ?? 50;
+  const maxLimit = options.limite ?? 150;
 
   if (!config.apiKey) {
     return [];
@@ -166,85 +186,87 @@ export async function fetchImoviewStalledLeads(options: {
 
   const headers = buildHeaders(config.apiKey);
   const cleanBase = config.baseUrl;
+  const allLeads: ImoviewLead[] = [];
+  const now = Date.now();
 
-  // Query Imoview Atendimentos
-  const params = new URLSearchParams();
-  params.set("limite", String(limite));
-  if (options.corretorId) params.set("codcorretor", options.corretorId);
-  if (options.statusId) params.set("codsituacao", options.statusId);
+  // Query both Venda (2) and Aluguel (1)
+  for (const finalidade of ["2", "1"]) {
+    // Up to 6 pages (120 records per finality)
+    for (let page = 1; page <= 6; page++) {
+      if (allLeads.length >= maxLimit) break;
 
-  const endpoints = [
-    `${cleanBase}/v1/atendimento/retornar?${params.toString()}`,
-    `${cleanBase}/v1/atendimentos?${params.toString()}`,
-    `${cleanBase}/atendimentos?${params.toString()}`,
-  ];
+      try {
+        const u = new URL(`${cleanBase}/Atendimento/RetornarAtendimentos`);
+        u.searchParams.set("numeroPagina", String(page));
+        u.searchParams.set("numeroRegistros", "20");
+        u.searchParams.set("finalidade", finalidade);
+        u.searchParams.set("fase", "0"); // All phases
+        u.searchParams.set("situacao", options.statusId || "1"); // 1 = Em atendimento
+        if (options.corretorId) {
+          u.searchParams.set("codigoCorretor", options.corretorId);
+        }
 
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, { method: "GET", headers });
-      if (res.ok) {
-        const json = await res.json();
-        const rawList = Array.isArray(json)
-          ? json
-          : json.atendimentos || json.data || json.lista || [];
+        const res = await fetch(u.toString(), { method: "GET", headers });
+        if (!res.ok) break;
 
-        const now = Date.now();
+        const data = await res.json();
+        if (!data.lista || !Array.isArray(data.lista) || data.lista.length === 0) {
+          break;
+        }
 
-        const filtered: ImoviewLead[] = rawList
-          .map((item: any) => {
-            const dataContatoRaw =
-              item.data_ultimo_historico ||
-              item.dataultimocontato ||
-              item.data_alteracao ||
-              item.data_cadastro ||
-              item.data;
+        for (const item of data.lista) {
+          const rawPhone = item.lead?.telefone1 || item.lead?.telefone2 || "";
+          const cleanPhone = rawPhone.replace(/\D/g, "");
+          if (!cleanPhone || cleanPhone.length < 8) continue;
 
-            const contactDate = dataContatoRaw ? new Date(dataContatoRaw) : new Date();
-            const diffDays = Math.max(
-              0,
-              Math.floor((now - contactDate.getTime()) / (1000 * 60 * 60 * 24))
-            );
+          // Parse contact date
+          const dateStr = item.datahoraultimainteracao || item.datahorainclusao;
+          const contactDate = parseBrDate(dateStr);
+          const diffDays = contactDate
+            ? Math.max(0, Math.floor((now - contactDate.getTime()) / (1000 * 60 * 60 * 24)))
+            : 0;
 
-            const telefone =
-              item.cliente_celular ||
-              item.celular ||
-              item.telefone ||
-              item.cliente_telefone ||
-              "";
+          // Filter by minimum stalled days
+          if (diffDays < minDays) continue;
 
-            return {
-              atendimentoId: String(item.codigo || item.id || item.codatendimento || ""),
-              clienteId: String(item.codcliente || item.cliente_codigo || ""),
-              clienteNome: item.cliente_nome || item.nome_cliente || item.nome || "Cliente",
-              telefone,
-              corretorNome: item.corretor_nome || item.nome_corretor || item.corretor || "Rhema Imóveis",
-              corretorId: String(item.codcorretor || item.corretor_codigo || ""),
-              codigoImovel: item.codimovel || item.imovel_codigo || item.codigo_imovel || "",
-              tipoImovel: item.tipo_imovel || item.imovel_tipo || "Imóvel",
-              bairroInteresse: item.bairro || item.imovel_bairro || "",
-              valorInteresse: item.valor ? `R$ ${item.valor}` : "",
-              diasSemContato: diffDays,
-              ultimoHistorico: item.ultimo_historico || item.historico || "Sem histórico recente",
-              dataUltimoContato: contactDate.toISOString(),
-              statusAtendimento: item.situacao || item.status || "Em Aberto",
-            };
-          })
-          .filter((lead: ImoviewLead) => {
-            return (
-              lead.telefone &&
-              lead.telefone.replace(/\D/g, "").length >= 8 &&
-              lead.diasSemContato >= minDays
-            );
+          // Filter by broker if specified
+          if (options.corretorId && String(item.corretorcodigo) !== options.corretorId) {
+            continue;
+          }
+
+          const ultimoHistorico =
+            item.interacoes && item.interacoes.length > 0
+              ? item.interacoes[0].descricao || item.interacoes[0].texto || "Interação registrada"
+              : "Sem histórico registrado";
+
+          allLeads.push({
+            atendimentoId: String(item.codigo),
+            clienteId: String(item.lead?.codigo || ""),
+            clienteNome: item.lead?.nome || "Cliente",
+            telefone: rawPhone,
+            corretorNome: item.corretor || "Rhema Imóveis",
+            corretorId: String(item.corretorcodigo || ""),
+            finalidade: item.finalidade || (finalidade === "2" ? "Venda" : "Aluguel"),
+            funil: item.funil || "Atendimento",
+            diasSemContato: diffDays,
+            dataUltimoContato: dateStr || (contactDate ? contactDate.toISOString() : undefined),
+            ultimoHistorico,
+            statusAtendimento: item.situacao || "Em atendimento",
           });
 
-        return filtered;
+          if (allLeads.length >= maxLimit) break;
+        }
+      } catch (e: any) {
+        logger.error("Imoview", `Error fetching page ${page} of finalidade ${finalidade}:`, e);
+        break;
       }
-    } catch (e) {
-      logger.error("Imoview", `Error fetching leads from ${url}`, e);
     }
   }
 
-  return [];
+  // Sort by most days without contact first
+  allLeads.sort((a, b) => b.diasSemContato - a.diasSemContato);
+
+  return allLeads;
 }
 
 export async function recordImoviewInteraction(
@@ -255,39 +277,29 @@ export async function recordImoviewInteraction(
   const config = await getImoviewConfig();
   if (!config.apiKey || !config.autoRecordInteraction) return false;
 
-  const headers = buildHeaders(config.apiKey);
   const cleanBase = config.baseUrl;
-
-  const endpoints = [
-    `${cleanBase}/v1/atendimento/gravarhistorico`,
-    `${cleanBase}/v1/atendimento/inserirhistorico`,
-    `${cleanBase}/v1/atendimento/historico`,
-    `${cleanBase}/atendimentos/${atendimentoId}/historico`,
-  ];
-
-  const payload = {
-    codatendimento: atendimentoId,
-    atendimentoId,
-    descricao: `[${tipo}] ${historicoTexto}`,
-    historico: `[${tipo}] ${historicoTexto}`,
-    data: new Date().toISOString(),
+  const headers = {
+    ...buildHeaders(config.apiKey),
+    "Content-Type": "application/json",
   };
 
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
-      });
+  try {
+    const u = new URL(`${cleanBase}/Atendimento/App_IncluirInteracao`);
+    u.searchParams.set("codigoAtendimento", atendimentoId);
+    u.searchParams.set("descricao", `[${tipo}] ${historicoTexto}`);
+    u.searchParams.set("codigoUsuario", "1");
 
-      if (res.ok) {
-        logger.info("Imoview", `History recorded for atendimento ${atendimentoId}`);
-        return true;
-      }
-    } catch (e) {
-      logger.error("Imoview", `Error recording history at ${url}`, e);
+    const res = await fetch(u.toString(), {
+      method: "POST",
+      headers,
+    });
+
+    if (res.ok) {
+      logger.info("Imoview", `History recorded successfully for atendimento #${atendimentoId}`);
+      return true;
     }
+  } catch (e) {
+    logger.error("Imoview", `Error recording interaction for #${atendimentoId}:`, e);
   }
 
   return false;
