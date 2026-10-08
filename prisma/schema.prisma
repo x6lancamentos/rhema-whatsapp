@@ -49,6 +49,8 @@ model User {
   webhooks  Webhook[]
   notifications Notification[]
   sessionAccesses SessionAccess[]
+  templates       MessageTemplate[]
+  contactLists    ContactList[]
 }
 
 model Session {
@@ -367,8 +369,14 @@ model BroadcastLog {
   total       Int
   sent        Int                 @default(0)
   failed      Int                 @default(0)
-  status      String              @default("running") // running, completed, cancelled
-  delay       Int                 @default(2000)
+  status      String              @default("running") // running, completed, cancelled, paused
+  delay       Int                 @default(2000)      // legacy delay
+  minDelay    Int                 @default(2000)      // ms min delay
+  maxDelay    Int                 @default(5000)      // ms max delay
+  batchSize   Int?                // e.g. pause after every 20 msgs
+  batchPause  Int?                // e.g. pause duration in seconds
+  mediaUrl    String?             @db.Text
+  mediaType   String?             // image, video, document
   startedAt   DateTime            @default(now())
   completedAt DateTime?
 
@@ -382,6 +390,9 @@ model BroadcastRecipient {
   id              String       @id @default(cuid())
   broadcastLogId  String
   jid             String
+  name            String?
+  resolvedMessage String?      @db.Text
+  variables       Json?
   status          String       @default("pending") // pending, sent, failed
   error           String?      @db.Text
   sentAt          DateTime?
@@ -390,3 +401,37 @@ model BroadcastRecipient {
 
   @@index([broadcastLogId])
 }
+
+// Reusable message templates
+model MessageTemplate {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  category    String?  @default("Geral")
+  content     String   @db.Text
+  mediaUrl    String?  @db.Text
+  mediaType   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Saved contact lists with variables
+model ContactList {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  contacts    Json     // Array of { phone, name, variables: {...} }
+  totalCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+

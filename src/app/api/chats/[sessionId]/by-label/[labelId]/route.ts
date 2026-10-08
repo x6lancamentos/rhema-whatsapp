@@ -46,10 +46,28 @@ export async function GET(
 
         const chatJids = chatLabels.map(cl => cl.chatJid);
 
+        // Fetch contacts for these JIDs to provide names
+        const contacts = await prisma.contact.findMany({
+            where: {
+                sessionId,
+                jid: { in: chatJids }
+            },
+            select: { jid: true, name: true, notify: true, verifiedName: true }
+        });
+
+        const contactMap = new Map(contacts.map(c => [c.jid, c.name || c.notify || c.verifiedName || ""]));
+
+        const enrichedChats = chatJids.map(jid => ({
+            jid,
+            name: contactMap.get(jid) || "",
+            phone: jid.split('@')[0]
+        }));
+
         return NextResponse.json({ 
             success: true,
             label,
             chats: chatJids,
+            contacts: enrichedChats,
             count: chatJids.length
         });
 
