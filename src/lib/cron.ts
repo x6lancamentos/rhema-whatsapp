@@ -2,12 +2,37 @@ import cron from "node-cron";
 import cronParser from "cron-parser";
 import { prisma } from "@/lib/prisma";
 import { waManager } from "@/modules/whatsapp/manager";
+import { executeBroadcast } from "@/lib/broadcast-engine";
 import { logger } from "./logger";
 export function initScheduler() {
     // Run every minute
     cron.schedule("* * * * *", async () => {
         try {
             const now = new Date();
+
+            // Fetch scheduled broadcasts due for execution
+            try {
+                const pendingBroadcasts = await prisma.broadcastLog.findMany({
+                    where: {
+                        status: "scheduled",
+                        scheduledAt: {
+                            lte: now
+                        }
+                    },
+                    select: { id: true }
+                });
+
+                if (pendingBroadcasts.length > 0) {
+                    logger.info("Cron", `Found ${pendingBroadcasts.length} scheduled broadcasts to execute`);
+                    for (const b of pendingBroadcasts) {
+                        executeBroadcast(b.id).catch(err => {
+                            logger.error("Cron", `Error executing scheduled broadcast ${b.id}`, err);
+                        });
+                    }
+                }
+            } catch (broadcastCronErr) {
+                logger.error("Cron", "Error checking scheduled broadcasts", broadcastCronErr);
+            }
             
             // Fetch pending messages due for sending
             const pendingMessages = await prisma.scheduledMessage.findMany({

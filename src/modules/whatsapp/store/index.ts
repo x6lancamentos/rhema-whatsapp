@@ -554,6 +554,86 @@ async function processAndSaveMessage(
                     await sock.sendMessage(finalRemoteJid, { text: config.welcomeMessage });
                 }
             }
+
+            // Automatic Opt-Out & Opt-In handling
+            if (!fromMe && triggerWebhook && text && !remoteJid.includes('@g.us')) {
+                const cleanText = text.trim().toUpperCase();
+                const optOutKeywords = ['PARAR', 'SAIR', 'CANCELAR', 'NÃO QUERO', 'NAO QUERO', 'DESCADASTRAR', 'STOP', 'REMOVER', 'PARE'];
+                const optInKeywords = ['QUERO RECEBER', 'VOLTAR', 'REATIVAR'];
+
+                const isOptOut = optOutKeywords.some(kw => cleanText === kw || cleanText.startsWith(kw + " "));
+                const isOptIn = optInKeywords.some(kw => cleanText === kw || cleanText.startsWith(kw + " "));
+
+                if (isOptOut || isOptIn) {
+                    try {
+                        const sessionUser = await prisma.session.findUnique({
+                            where: { id: dbSessionId },
+                            select: { userId: true }
+                        });
+
+                        if (sessionUser?.userId) {
+                            const phone = finalRemoteJid.replace(/@.*$/, '');
+
+                            if (isOptOut) {
+                                await prisma.blacklist.upsert({
+                                    where: { userId_phone: { userId: sessionUser.userId, phone } },
+                                    create: {
+                                        userId: sessionUser.userId,
+                                        phone,
+                                        jid: finalRemoteJid,
+                                        reason: `Opt-out automático (Mensagem: "${text.trim().substring(0, 40)}")`
+                                    },
+                                    update: {
+                                        reason: `Opt-out automático (Mensagem: "${text.trim().substring(0, 40)}")`
+                                    }
+                                });
+                                logger.info("Store", `Contact ${phone} auto-added to blacklist by opt-out`);
+                                if (sock) {
+                                    await sock.sendMessage(finalRemoteJid, {
+                                        text: "Você foi descadastrado com sucesso e não receberá mais mensagens automáticas. Se quiser voltar a receber novidades no futuro, envie QUERO RECEBER."
+                                    });
+                                }
+                            } else if (isOptIn) {
+                                await prisma.blacklist.deleteMany({
+                                    where: { userId: sessionUser.userId, phone }
+                                });
+                                logger.info("Store", `Contact ${phone} removed from blacklist by opt-in`);
+                                if (sock) {
+                                    await sock.sendMessage(finalRemoteJid, {
+                                        text: "Pronto! Você foi reativado para receber nossas mensagens."
+                                    });
+                                }
+                            }
+                        }
+                    } catch (optErr) {
+                        logger.error("Store", "Error in auto opt-out handling", optErr);
+                    }
+                }
+            }
+
+            // Automatic Imoview lead reply recording
+            if (!fromMe && triggerWebhook && text && !remoteJid.includes('@g.us')) {
+                try {
+                    const recentRecipient = await prisma.broadcastRecipient.findFirst({
+                        where: {
+                            jid: finalRemoteJid,
+                            imoviewAtendimentoId: { not: null },
+                        },
+                        orderBy: { sentAt: "desc" },
+                        select: { imoviewAtendimentoId: true, name: true }
+                    });
+
+                    if (recentRecipient?.imoviewAtendimentoId) {
+                        const { recordImoviewInteraction } = await import("@/lib/imoview");
+                        recordImoviewInteraction(
+                            recentRecipient.imoviewAtendimentoId,
+                            `💬 Lead respondeu ao WhatsApp Auto: "${text.trim().substring(0, 150)}"`
+                        ).catch(err => logger.error("Imoview", "Error logging reply to CRM", err));
+                    }
+                } catch (imoviewReplyErr) {
+                    logger.error("Store", "Error checking Imoview reply", imoviewReplyErr);
+                }
+            }
         }
 
         // Trigger webhook for new messages only (not history sync)

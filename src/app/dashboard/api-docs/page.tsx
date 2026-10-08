@@ -73,10 +73,17 @@ export default function ApiDocsPage() {
         { category: "Messaging", method: "POST", path: "/api/messages/[sessionId]/[jid]/[messageId]/react", description: "Send reaction", params: "Path: sessionId, jid, messageId" },
         { category: "Messaging", method: "POST", path: "/api/messages/[sessionId]/[jid]/contact", description: "Send contact", params: "Path: sessionId, jid, Body: { vcard }" },
         { category: "Messaging", method: "POST", path: "/api/messages/[sessionId]/[jid]/forward", description: "Forward message", params: "Path: sessionId, jid, Body: { messageId }" },
-        { category: "Messaging", method: "POST", path: "/api/messages/[sessionId]/broadcast", description: "Broadcast message", params: "Path: sessionId, Body: { recipients[], message, delay }" },
+        { category: "Messaging", method: "POST", path: "/api/messages/[sessionId]/broadcast", description: "Broadcast message (with PTT audio, media, multi-chip, and scheduling)", params: "Path: sessionId, Body: { recipients[], message, mediaUrl, audioUrl, isPtt, sessionIds[], scheduledAt, simulateTyping, businessHoursOnly, minDelay, maxDelay }" },
+        { category: "Messaging", method: "POST", path: "/api/messages/[sessionId]/broadcast/[broadcastId]/control", description: "Control broadcast (pause/resume/cancel)", params: "Path: sessionId, broadcastId, Body: { action: 'pause' | 'resume' | 'cancel' }" },
         { category: "Messaging", method: "GET", path: "/api/messages/[sessionId]/broadcast/history", description: "Get broadcast history", params: "Path: sessionId, Query: limit, offset" },
         { category: "Messaging", method: "GET", path: "/api/messages/[sessionId]/broadcast/history/[logId]", description: "Get broadcast detail", params: "Path: sessionId, logId" },
+        { category: "Messaging", method: "POST", path: "/api/upload", description: "Upload media or voice note", params: "Body: FormData (file)" },
         { category: "Messaging", method: "DELETE", path: "/api/messages/[sessionId]/[jid]/[messageId]", description: "Delete message", params: "Path: sessionId, jid, messageId" },
+
+        // Blacklist
+        { category: "Blacklist", method: "GET", path: "/api/blacklist", description: "List opt-out / blacklisted numbers", params: "Query: q" },
+        { category: "Blacklist", method: "POST", path: "/api/blacklist", description: "Add phone to blacklist", params: "Body: { phone, reason }" },
+        { category: "Blacklist", method: "DELETE", path: "/api/blacklist/[id]", description: "Remove phone from blacklist", params: "Path: id" },
 
         { category: "Messaging", method: "GET", path: "/api/messages/[sessionId]/download/[messageId]/media", description: "Download media", params: "Path: sessionId, messageId" },
         { category: "Messaging", method: "GET", path: "/api/media/[filename]", description: "Serve media file", params: "Path: filename" },

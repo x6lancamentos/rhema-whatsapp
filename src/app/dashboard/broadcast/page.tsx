@@ -40,6 +40,20 @@ import {
   RotateCcw,
   Plus,
   UploadCloud,
+  Mic,
+  MicOff,
+  Music,
+  Paperclip,
+  ShieldBan,
+  Calendar,
+  Layers,
+  Volume2,
+  Check,
+  AlertCircle,
+  Info,
+  Clock4,
+  Smartphone,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "@/components/dashboard/session-provider";
@@ -51,13 +65,14 @@ import * as XLSX from "xlsx";
 
 interface BroadcastProgress {
   broadcastId: string;
-  status: "running" | "completed" | "paused" | "cancelled";
+  status: "running" | "completed" | "paused" | "cancelled" | "scheduled";
   total: number;
   sent: number;
   failed: number;
   current?: string | null;
   currentName?: string | null;
   currentMessage?: string | null;
+  currentSession?: string | null;
   progress?: number;
   errors?: { jid: string; error: string }[];
   startedAt?: string;
@@ -75,9 +90,30 @@ interface BroadcastLog {
   delay: number;
   minDelay?: number;
   maxDelay?: number;
+  batchSize?: number | null;
+  batchPause?: number | null;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  audioUrl?: string | null;
+  isPtt?: boolean;
+  sessionIds?: any;
+  scheduledAt?: string | null;
+  simulateTyping?: boolean;
+  businessHoursOnly?: boolean;
+  startHour?: number;
+  endHour?: number;
   startedAt: string;
   completedAt: string | null;
   recipients?: BroadcastRecipient[];
+}
+
+interface BlacklistEntry {
+  id: string;
+  userId: string;
+  phone: string;
+  jid: string;
+  reason?: string | null;
+  createdAt: string;
 }
 
 interface BroadcastRecipient {
@@ -112,11 +148,11 @@ interface ContactListOption {
 }
 
 export default function BroadcastPage() {
-  const { sessionId } = useSession();
+  const { sessionId, sessions } = useSession();
   const { getSocket, joinSession } = useSocket();
 
   // Navigation Tabs
-  const [activeTab, setActiveTab] = useState<"new" | "templates" | "lists" | "history">("new");
+  const [activeTab, setActiveTab] = useState<"new" | "templates" | "lists" | "history" | "blacklist">("new");
 
   // Recipient Mode: "file" | "label" | "list" | "manual"
   const [recipientSource, setRecipientSource] = useState<"file" | "label" | "list" | "manual">("file");
@@ -130,6 +166,34 @@ export default function BroadcastPage() {
   // Message & Editor State
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Media & PTT Voice Note State
+  const [attachmentType, setAttachmentType] = useState<"none" | "audio" | "media">("none");
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaType, setMediaType] = useState<"image" | "video" | "document">("image");
+  const [mediaFileName, setMediaFileName] = useState("");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [isPtt, setIsPtt] = useState(true);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [audioRecordDuration, setAudioRecordDuration] = useState(0);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioTimerRef = useRef<any>(null);
+
+  // Multi-Chip Rotation State
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
+
+  // Scheduling State
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState("");
+
+  // Human Simulation & Business Hours Protection
+  const [simulateTyping, setSimulateTyping] = useState(true);
+  const [businessHoursOnly, setBusinessHoursOnly] = useState(false);
+  const [startHour, setStartHour] = useState(8);
+  const [endHour, setEndHour] = useState(20);
 
   // Delay & Anti-Ban Configuration
   const [minDelaySec, setMinDelaySec] = useState(15);
@@ -161,6 +225,14 @@ export default function BroadcastPage() {
   const [selectedLog, setSelectedLog] = useState<BroadcastLog | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Blacklist Tab
+  const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
+  const [blacklistLoading, setBlacklistLoading] = useState(false);
+  const [blacklistSearch, setBlacklistSearch] = useState("");
+  const [addBlacklistDialogOpen, setAddBlacklistDialogOpen] = useState(false);
+  const [newBlacklistPhone, setNewBlacklistPhone] = useState("");
+  const [newBlacklistReason, setNewBlacklistReason] = useState("");
 
   // Preview simulation
   const [previewSample, setPreviewSample] = useState<string>("");
@@ -263,12 +335,251 @@ export default function BroadcastPage() {
     fetchSavedLists();
   }, [fetchTemplates, fetchSavedLists]);
 
+  // Auto-load Imoview Resgate Leads if coming from Imoview screen
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("source") === "imoview") {
+      try {
+        const stored = localStorage.getItem("imoview_resgate_leads");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setContactsList(parsed);
+            setRecipientSource("manual");
+            setDetectedColumns(["nome", "primeiro_nome", "corretor", "codigo_imovel", "bairro"]);
+            setFileStats({
+              name: `Imoview CRM (${parsed.length} leads parados)`,
+              total: parsed.length,
+              valid: parsed.length,
+              duplicates: 0,
+            });
+
+            const suggestedMsg = "{Olá|Oi} {{primeiro_nome}}, tudo bem? Aqui é da Rhema Imóveis.\nVi aqui no sistema que você estava buscando imóveis na região {de {{bairro}}|da cidade}.\n\nAinda está buscando opções ou já encontrou o que precisava?";
+            setMessage(suggestedMsg);
+            updatePreview(suggestedMsg, parsed);
+
+            toast.success(`⚡ ${parsed.length} leads do Imoview carregados com sucesso para resgate!`);
+            localStorage.removeItem("imoview_resgate_leads");
+          }
+        }
+      } catch (err) {
+        console.error("Error loading imoview leads", err);
+      }
+    }
+  }, []);
+
+  const fetchBlacklist = useCallback(async () => {
+    setBlacklistLoading(true);
+    try {
+      const url = blacklistSearch ? `/api/blacklist?q=${encodeURIComponent(blacklistSearch)}` : "/api/blacklist";
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        setBlacklist(json.data || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch blacklist", e);
+    } finally {
+      setBlacklistLoading(false);
+    }
+  }, [blacklistSearch]);
+
   useEffect(() => {
     if (sessionId) {
       fetchLabels();
       if (activeTab === "history") fetchHistory();
+      if (activeTab === "blacklist") fetchBlacklist();
     }
-  }, [sessionId, activeTab, fetchLabels, fetchHistory]);
+  }, [sessionId, activeTab, fetchLabels, fetchHistory, fetchBlacklist]);
+
+  // Audio Recording & Upload Handlers
+  const handleMediaFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.status) {
+        setMediaUrl(data.data.url);
+        setMediaFileName(file.name);
+        if (file.type.startsWith("image/")) {
+          setMediaType("image");
+        } else if (file.type.startsWith("video/")) {
+          setMediaType("video");
+        } else {
+          setMediaType("document");
+        }
+        toast.success("Arquivo anexado com sucesso!");
+      } else {
+        toast.error(data.message || "Falha no upload do arquivo");
+      }
+    } catch (err: any) {
+      toast.error("Erro ao fazer upload do arquivo");
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handleAudioFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.status) {
+        setAudioUrl(data.data.url);
+        setAudioPreviewUrl(URL.createObjectURL(file));
+        toast.success("Áudio anexado com sucesso!");
+      } else {
+        toast.error(data.message || "Falha no upload do áudio");
+      }
+    } catch (err: any) {
+      toast.error("Erro ao fazer upload do áudio");
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const startAudioRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/ogg; codecs=opus" });
+        const preview = URL.createObjectURL(audioBlob);
+        setAudioPreviewUrl(preview);
+
+        setUploadingMedia(true);
+        try {
+          const file = new File([audioBlob], `audio_${Date.now()}.ogg`, { type: "audio/ogg" });
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+          if (res.ok && data.status) {
+            setAudioUrl(data.data.url);
+            toast.success("Áudio gravado e pronto para envio!");
+          } else {
+            toast.error(data.message || "Erro no upload do áudio gravado");
+          }
+        } catch (uploadErr) {
+          toast.error("Erro ao salvar áudio gravado");
+        } finally {
+          setUploadingMedia(false);
+        }
+
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      recorder.start(250);
+      mediaRecorderRef.current = recorder;
+      setIsRecordingAudio(true);
+      setAudioRecordDuration(0);
+
+      audioTimerRef.current = setInterval(() => {
+        setAudioRecordDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      toast.error("Permissão de microfone negada ou indisponível");
+    }
+  };
+
+  const stopAudioRecording = () => {
+    if (mediaRecorderRef.current && isRecordingAudio) {
+      mediaRecorderRef.current.stop();
+      setIsRecordingAudio(false);
+      if (audioTimerRef.current) {
+        clearInterval(audioTimerRef.current);
+        audioTimerRef.current = null;
+      }
+    }
+  };
+
+  const clearAudio = () => {
+    setAudioUrl("");
+    setAudioPreviewUrl("");
+    setAudioRecordDuration(0);
+  };
+
+  const clearMedia = () => {
+    setMediaUrl("");
+    setMediaFileName("");
+  };
+
+  // Blacklist Handlers
+  const handleAddBlacklist = async () => {
+    if (!newBlacklistPhone.trim()) {
+      return toast.error("Digite o número de telefone");
+    }
+    try {
+      const res = await fetch("/api/blacklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: newBlacklistPhone.trim(),
+          reason: newBlacklistReason.trim() || "Adicionado manualmente",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Número adicionado à lista negra!");
+        setAddBlacklistDialogOpen(false);
+        setNewBlacklistPhone("");
+        setNewBlacklistReason("");
+        fetchBlacklist();
+      } else {
+        toast.error(data.message || "Erro ao adicionar à lista negra");
+      }
+    } catch (e: any) {
+      toast.error("Erro ao conectar com servidor");
+    }
+  };
+
+  const handleDeleteBlacklist = async (id: string) => {
+    try {
+      const res = await fetch(`/api/blacklist/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Contato removido da lista negra!");
+        fetchBlacklist();
+      } else {
+        toast.error("Erro ao remover da lista negra");
+      }
+    } catch (e: any) {
+      toast.error("Erro ao remover contato");
+    }
+  };
 
   // 3. File Upload Handler (Excel/CSV)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -504,12 +815,31 @@ export default function BroadcastPage() {
   const handleStartBroadcast = async () => {
     if (!sessionId) return toast.error("Nenhuma sessão ativa selecionada");
     if (contactsList.length === 0) return toast.error("Adicione contatos para enviar");
-    if (!message.trim()) return toast.error("Digite o texto da mensagem");
+    
+    const hasText = message.trim().length > 0;
+    const hasMedia = !!mediaUrl;
+    const hasAudio = !!audioUrl;
+
+    if (!hasText && !hasMedia && !hasAudio) {
+      return toast.error("Digite o texto da mensagem, grave um áudio ou anexe uma mídia");
+    }
+
+    if (isScheduled) {
+      if (!scheduledDate) {
+        return toast.error("Informe a data e o horário para o agendamento");
+      }
+      const scheduledTime = new Date(scheduledDate).getTime();
+      if (isNaN(scheduledTime) || scheduledTime <= Date.now()) {
+        return toast.error("A data e hora do agendamento precisam estar no futuro");
+      }
+    }
 
     setLoading(true);
     setBroadcastProgress(null);
 
     try {
+      const chipSessions = selectedSessionIds.length > 0 ? selectedSessionIds : [sessionId];
+
       const payload = {
         recipients: contactsList.map((c) => ({
           phone: c.phone,
@@ -517,11 +847,21 @@ export default function BroadcastPage() {
           name: c.name,
           variables: c.variables,
         })),
-        message,
+        message: message.trim(),
         minDelay: minDelaySec * 1000,
         maxDelay: maxDelaySec * 1000,
         batchSize: enableBatchPause ? batchSize : null,
         batchPause: enableBatchPause ? batchPauseMin * 60 : null,
+        mediaUrl: mediaUrl || null,
+        mediaType: mediaUrl ? mediaType : null,
+        audioUrl: audioUrl || null,
+        isPtt: !!audioUrl && isPtt,
+        sessionIds: chipSessions,
+        scheduledAt: isScheduled && scheduledDate ? new Date(scheduledDate).toISOString() : null,
+        simulateTyping,
+        businessHoursOnly,
+        startHour,
+        endHour,
       };
 
       const res = await fetch(`/api/messages/${sessionId}/broadcast`, {
@@ -532,14 +872,27 @@ export default function BroadcastPage() {
 
       const data = await res.json();
       if (res.ok) {
-        toast.success(`Disparo iniciado para ${contactsList.length} destinatários!`);
+        if (isScheduled) {
+          toast.success(
+            `Disparo agendado com sucesso para ${new Date(scheduledDate).toLocaleString("pt-BR")}!`
+          );
+          setActiveTab("history");
+          fetchHistory();
+        } else {
+          toast.success(
+            `Disparo iniciado para ${contactsList.length} destinatários!` +
+              (data.data?.filteredBlacklist > 0
+                ? ` (${data.data.filteredBlacklist} contatos protegidos na lista negra foram ignorados)`
+                : "")
+          );
+        }
       } else {
-        toast.error(data.message || "Erro ao iniciar disparo");
-        setLoading(false);
+        toast.error(data.message || data.error?.message || "Erro ao iniciar disparo");
       }
     } catch (e: any) {
       toast.error("Erro ao conectar com servidor");
-      setLoading(false);
+    } finally {
+      if (isScheduled) setLoading(false);
     }
   };
 
@@ -687,6 +1040,17 @@ export default function BroadcastPage() {
             >
               <History className="h-4 w-4 text-emerald-500" />
               Histórico
+            </button>
+            <button
+              onClick={() => setActiveTab("blacklist")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
+                activeTab === "blacklist"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <ShieldBan className="h-4 w-4 text-rose-500" />
+              Lista Negra / Opt-Out ({blacklist.length})
             </button>
           </div>
         </div>
@@ -1026,6 +1390,171 @@ export default function BroadcastPage() {
                       </div>
                     </div>
 
+                    {/* Seletor de Tipo de Anexo: Texto puro / Áudio Gravado PTT / Mídia */}
+                    <div className="space-y-3 pt-3 border-t border-border/40">
+                      <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                        <Paperclip className="h-3.5 w-3.5 text-primary" /> Anexo Opcional: Áudio Gravado (PTT) ou Mídia
+                      </Label>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          type="button"
+                          variant={attachmentType === "none" ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 text-xs font-medium"
+                          onClick={() => {
+                            setAttachmentType("none");
+                            clearAudio();
+                            clearMedia();
+                          }}
+                        >
+                          Apenas Texto
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={attachmentType === "audio" ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 text-xs font-medium flex items-center justify-center gap-1.5"
+                          onClick={() => setAttachmentType("audio")}
+                        >
+                          <Mic className="h-3.5 w-3.5 text-emerald-500" /> Áudio (PTT)
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={attachmentType === "media" ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 text-xs font-medium flex items-center justify-center gap-1.5"
+                          onClick={() => setAttachmentType("media")}
+                        >
+                          <UploadCloud className="h-3.5 w-3.5 text-blue-500" /> Imagem / PDF
+                        </Button>
+                      </div>
+
+                      {/* Painel de Áudio PTT */}
+                      {attachmentType === "audio" && (
+                        <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {isRecordingAudio ? (
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  className="h-8 animate-pulse flex items-center gap-1.5"
+                                  onClick={stopAudioRecording}
+                                >
+                                  <MicOff className="h-4 w-4" /> Parar Gravação ({audioRecordDuration}s)
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-1.5"
+                                  onClick={startAudioRecording}
+                                  disabled={uploadingMedia}
+                                >
+                                  <Mic className="h-4 w-4 text-emerald-600" /> Gravar Microfone
+                                </Button>
+                              )}
+
+                              <span className="text-xs text-muted-foreground">ou</span>
+
+                              <label className="cursor-pointer">
+                                <input
+                                  type="file"
+                                  accept="audio/*"
+                                  className="hidden"
+                                  onChange={handleAudioFileUpload}
+                                  disabled={uploadingMedia || isRecordingAudio}
+                                />
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-input text-xs font-medium hover:bg-muted transition-colors">
+                                  <UploadCloud className="h-3.5 w-3.5 text-muted-foreground" />
+                                  {uploadingMedia ? "Enviando..." : "Subir Áudio (MP3/OGG)"}
+                                </div>
+                              </label>
+                            </div>
+
+                            {audioUrl && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs text-rose-600 hover:bg-rose-50"
+                                onClick={clearAudio}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-1" /> Remover Áudio
+                              </Button>
+                            )}
+                          </div>
+
+                          {audioPreviewUrl && (
+                            <div className="pt-1">
+                              <audio controls src={audioPreviewUrl} className="w-full h-8" />
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="space-y-0.5">
+                              <Label className="text-xs font-medium">Enviar como Áudio Gravado na Hora (PTT)</Label>
+                              <p className="text-[11px] text-muted-foreground">
+                                Envia com o microfone verde nativo do WhatsApp (taxa de abertura muito superior).
+                              </p>
+                            </div>
+                            <Switch checked={isPtt} onCheckedChange={setIsPtt} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Painel de Mídia (Imagem/Vídeo/PDF) */}
+                      {attachmentType === "media" && (
+                        <div className="p-3.5 rounded-xl bg-blue-500/5 border border-blue-500/20 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <label className="cursor-pointer">
+                              <input
+                                type="file"
+                                accept="image/*,video/*,application/pdf"
+                                className="hidden"
+                                onChange={handleMediaFileUpload}
+                                disabled={uploadingMedia}
+                              />
+                              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-background border border-input text-xs font-medium hover:bg-muted transition-colors shadow-xs">
+                                <UploadCloud className="h-4 w-4 text-primary" />
+                                {uploadingMedia ? "Enviando arquivo..." : "Selecionar Imagem, Vídeo ou PDF"}
+                              </div>
+                            </label>
+
+                            {mediaUrl && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium truncate max-w-xs text-foreground">
+                                  📎 {mediaFileName || mediaUrl.split("/").pop()}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs text-rose-600 hover:bg-rose-50"
+                                  onClick={clearMedia}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Remover
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+
+                          {mediaUrl && mediaType === "image" && (
+                            <div className="mt-2 max-w-[180px] rounded-lg overflow-hidden border border-border/60">
+                              <img src={mediaUrl} alt="Preview" className="w-full h-auto object-cover max-h-32" />
+                            </div>
+                          )}
+
+                          <p className="text-[11px] text-muted-foreground">
+                            O texto digitado acima será enviado como legenda junto com o arquivo.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Simulador de Preview Estilo WhatsApp */}
                     {previewSample && (
                       <div className="bg-slate-100 dark:bg-slate-900/60 p-3.5 rounded-xl border border-border/60 space-y-2">
@@ -1044,6 +1573,17 @@ export default function BroadcastPage() {
 
                         {/* Balão WhatsApp */}
                         <div className="max-w-[85%] bg-white dark:bg-emerald-950/40 text-slate-800 dark:text-slate-100 rounded-xl rounded-tl-xs p-3 shadow-xs text-xs sm:text-sm whitespace-pre-wrap leading-relaxed border border-border/40">
+                          {audioUrl && (
+                            <div className="flex items-center gap-2 mb-2 p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300">
+                              <Mic className="h-4 w-4 text-emerald-600" />
+                              <span>[Mensagem de Voz PTT Gravada]</span>
+                            </div>
+                          )}
+                          {mediaUrl && (
+                            <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-500/20 text-xs text-blue-800 dark:text-blue-300">
+                              <span>📎 [Arquivo Anexado: {mediaType}]</span>
+                            </div>
+                          )}
                           {previewSample}
                           <div className="text-[10px] text-slate-400 dark:text-slate-400 text-right mt-1">
                             12:00 ✓✓
@@ -1054,12 +1594,79 @@ export default function BroadcastPage() {
                   </CardContent>
                 </Card>
 
-                {/* Card de Configurações Anti-Ban & Timing */}
+                {/* Card de Rotação Multi-Chip (se houver mais de uma sessão disponível) */}
+                {sessions && sessions.length > 1 && (
+                  <Card className="border-border/60 shadow-sm">
+                    <CardHeader className="py-3 px-5 bg-muted/20 border-b border-border/40">
+                      <CardTitle className="text-sm font-bold flex items-center gap-2">
+                        <Smartphone className="h-4 w-4 text-blue-500" />
+                        Multi-Chip: Rotação e Balanceamento de Disparos
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Distribua os envios entre múltiplos chips de WhatsApp para reduzir o risco de bloqueio e acelerar o disparo.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {sessions.map((s) => {
+                          const isConnected = s.status?.toLowerCase() === "connected";
+                          const isSelected =
+                            selectedSessionIds.length === 0
+                              ? s.sessionId === sessionId
+                              : selectedSessionIds.includes(s.sessionId);
+
+                          return (
+                            <div
+                              key={s.sessionId}
+                              onClick={() => {
+                                if (!isConnected) return;
+                                setSelectedSessionIds((prev) => {
+                                  const currentList = prev.length === 0 ? [sessionId] : prev;
+                                  if (currentList.includes(s.sessionId)) {
+                                    const next = currentList.filter((id) => id !== s.sessionId);
+                                    return next.length === 0 ? [sessionId] : next;
+                                  } else {
+                                    return [...currentList, s.sessionId];
+                                  }
+                                });
+                              }}
+                              className={`p-2.5 rounded-lg border flex items-center justify-between cursor-pointer transition-colors ${
+                                !isConnected
+                                  ? "opacity-50 cursor-not-allowed bg-muted/20 border-border/40"
+                                  : isSelected
+                                  ? "bg-primary/10 border-primary/40 text-foreground"
+                                  : "hover:bg-muted/40 border-border/60"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    isConnected ? "bg-emerald-500" : "bg-zinc-400"
+                                  }`}
+                                />
+                                <div className="truncate">
+                                  <div className="text-xs font-semibold truncate">{s.name || s.sessionId}</div>
+                                  <div className="text-[10px] text-muted-foreground">{s.sessionId}</div>
+                                </div>
+                              </div>
+                              {isSelected && <Badge variant="default" className="text-[10px] h-5">Ativo</Badge>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        🔄 As mensagens serão alternadas (round-robin) proporcionalmente entre todos os chips ativos selecionados.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Card de Configurações Anti-Ban, Horário e Agendamento */}
                 <Card className="border-border/60 shadow-sm">
                   <CardHeader className="py-3 px-5 bg-muted/20 border-b border-border/40">
                     <CardTitle className="text-sm font-bold flex items-center gap-2">
                       <Clock className="h-4 w-4 text-emerald-500" />
-                      3. Proteção Anti-Ban & Intervalos (Delay Randômico)
+                      3. Proteção Anti-Ban, Horário Comercial & Agendamento
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-4 space-y-5">
@@ -1102,11 +1709,104 @@ export default function BroadcastPage() {
                       </div>
                     </div>
 
-                    <p className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/40">
-                      ⚡ O sistema sorteará um tempo aleatório entre <strong>{minDelaySec}s</strong> e{" "}
-                      <strong>{maxDelaySec}s</strong> antes de cada envio, simulando digitação humana e impedindo que o
-                      WhatsApp identifique envios robotizados.
-                    </p>
+                    {/* Simulação de Digitação / Gravação Humana */}
+                    <div className="pt-2 border-t border-border/40 flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-semibold text-foreground">
+                          Simular Presença Humana ("digitando..." / "gravando áudio...")
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          Emite status de presença no WhatsApp do destinatário simulando uma pessoa real.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={simulateTyping}
+                        onCheckedChange={setSimulateTyping}
+                        disabled={loading}
+                      />
+                    </div>
+
+                    {/* Horário Comercial */}
+                    <div className="pt-2 border-t border-border/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-semibold text-foreground">
+                            Restringir Disparo ao Horário Comercial
+                          </Label>
+                          <p className="text-[11px] text-muted-foreground">
+                            Pausa os envios à noite e retoma automaticamente pela manhã para evitar denúncias.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={businessHoursOnly}
+                          onCheckedChange={setBusinessHoursOnly}
+                          disabled={loading}
+                        />
+                      </div>
+
+                      {businessHoursOnly && (
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-muted-foreground">Hora de Início (h):</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={23}
+                              value={startHour}
+                              onChange={(e) => setStartHour(Number(e.target.value) || 8)}
+                              className="h-8 text-xs font-mono"
+                              disabled={loading}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-muted-foreground">Hora de Término (h):</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={23}
+                              value={endHour}
+                              onChange={(e) => setEndHour(Number(e.target.value) || 20)}
+                              className="h-8 text-xs font-mono"
+                              disabled={loading}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Agendamento de Disparo */}
+                    <div className="pt-2 border-t border-border/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            <CalendarClock className="h-4 w-4 text-primary" />
+                            Agendar Disparo para Data/Hora Futura
+                          </Label>
+                          <p className="text-[11px] text-muted-foreground">
+                            O disparo será iniciado automaticamente pelo cron no horário programado.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={isScheduled}
+                          onCheckedChange={setIsScheduled}
+                          disabled={loading}
+                        />
+                      </div>
+
+                      {isScheduled && (
+                        <div className="pt-1">
+                          <Label className="text-[11px] text-muted-foreground">Data e Horário do Envio:</Label>
+                          <Input
+                            type="datetime-local"
+                            value={scheduledDate}
+                            onChange={(e) => setScheduledDate(e.target.value)}
+                            min={new Date().toISOString().slice(0, 16)}
+                            className="h-9 text-xs mt-1"
+                            disabled={loading}
+                          />
+                        </div>
+                      )}
+                    </div>
 
                     {/* Pausa de Segurança em Lote */}
                     <div className="pt-2 border-t border-border/40 space-y-3">
@@ -1161,11 +1861,21 @@ export default function BroadcastPage() {
                       size="lg"
                       className="w-full h-12 text-sm font-bold shadow-md shadow-primary/20"
                       onClick={handleStartBroadcast}
-                      disabled={loading || !sessionId || contactsList.length === 0 || !message.trim()}
+                      disabled={
+                        loading ||
+                        !sessionId ||
+                        contactsList.length === 0 ||
+                        (!message.trim() && !mediaUrl && !audioUrl)
+                      }
                     >
                       {loading ? (
                         <>
                           <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Disparando em Segundo Plano...
+                        </>
+                      ) : isScheduled ? (
+                        <>
+                          <CalendarClock className="mr-2 h-4 w-4" /> Agendar Disparo para{" "}
+                          {contactsList.length} Contatos
                         </>
                       ) : (
                         <>
@@ -1485,7 +2195,7 @@ export default function BroadcastPage() {
                   <Card key={log.id} className="border-border/60 hover:border-primary/40 transition-colors">
                     <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-sm text-foreground">
                             Disparo #{log.id.slice(0, 8)}
                           </span>
@@ -1495,23 +2205,50 @@ export default function BroadcastPage() {
                                 ? "default"
                                 : log.status === "cancelled"
                                 ? "destructive"
+                                : log.status === "scheduled"
+                                ? "outline"
                                 : "secondary"
                             }
-                            className="text-[10px] font-semibold uppercase"
+                            className={`text-[10px] font-semibold uppercase ${
+                              log.status === "scheduled"
+                                ? "border-blue-500/40 text-blue-600 bg-blue-500/10"
+                                : ""
+                            }`}
                           >
                             {log.status === "completed"
                               ? "Concluído"
                               : log.status === "cancelled"
                               ? "Cancelado"
+                              : log.status === "scheduled"
+                              ? "Agendado"
                               : "Em Andamento"}
                           </Badge>
+
+                          {log.isPtt && (
+                            <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30 bg-emerald-50/10">
+                              Áudio PTT 🎙️
+                            </Badge>
+                          )}
+                          {log.mediaUrl && (
+                            <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-500/30 bg-blue-50/10">
+                              Mídia 📎
+                            </Badge>
+                          )}
+
                           <span className="text-[11px] text-muted-foreground">
                             {new Date(log.startedAt).toLocaleString("pt-BR")}
                           </span>
+
+                          {log.scheduledAt && (
+                            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
+                              <CalendarClock className="h-3.5 w-3.5" />
+                              Programado para: {new Date(log.scheduledAt).toLocaleString("pt-BR")}
+                            </span>
+                          )}
                         </div>
 
                         <p className="text-xs text-muted-foreground truncate max-w-xl font-mono">
-                          {log.message}
+                          {log.message || (log.audioUrl ? "[Áudio Gravado PTT]" : "[Mídia sem texto]")}
                         </p>
 
                         <div className="flex gap-4 text-xs font-mono">
@@ -1522,6 +2259,28 @@ export default function BroadcastPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {log.status === "scheduled" && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={async () => {
+                              if (!confirm("Deseja realmente cancelar este disparo agendado?")) return;
+                              await fetch(
+                                `/api/messages/${sessionId}/broadcast/${log.id}/control`,
+                                {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "cancel" }),
+                                }
+                              );
+                              toast.success("Disparo agendado cancelado com sucesso!");
+                              fetchHistory();
+                            }}
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-1" /> Cancelar
+                          </Button>
+                        )}
                         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openDetail(log)}>
                           <Eye className="h-3.5 w-3.5 mr-1" /> Ver Detalhes
                         </Button>
@@ -1544,6 +2303,125 @@ export default function BroadcastPage() {
                     </CardContent>
                   </Card>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: LISTA NEGRA / PROTEÇÃO DE OPT-OUT */}
+        {/* ========================================================================= */}
+        {activeTab === "blacklist" && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <ShieldBan className="h-5 w-5 text-rose-500" />
+                  Lista Negra & Proteção Anti-Denúncias (Opt-Out)
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Contatos bloqueados são automaticamente ignorados e filtrados antes de qualquer disparo.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchBlacklist}
+                  disabled={blacklistLoading}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-1 ${blacklistLoading ? "animate-spin" : ""}`} /> Atualizar
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-rose-600 hover:bg-rose-700 text-white"
+                  onClick={() => setAddBlacklistDialogOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Bloquear Número
+                </Button>
+              </div>
+            </div>
+
+            {/* Banner Informativo sobre Opt-Out Automático */}
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200">
+              <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold">Proteção Automática Inteligente Ativa</p>
+                <p className="text-[11px] leading-relaxed opacity-90">
+                  Quando qualquer contato responder palavras como <strong>"PARAR"</strong>, <strong>"CANCELAR"</strong>, <strong>"SAIR"</strong> ou <strong>"NÃO QUERO"</strong>, o sistema automaticamente o descadastra, adiciona o número nesta lista negra e envia uma confirmação de descadastramento. Isso protege seus números contra denúncias e banimentos imediatos.
+                </p>
+              </div>
+            </div>
+
+            {/* Barra de Busca */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Buscar por telefone ou motivo..."
+                value={blacklistSearch}
+                onChange={(e) => setBlacklistSearch(e.target.value)}
+                className="max-w-md h-9 text-xs"
+              />
+            </div>
+
+            {/* Tabela de Contatos Bloqueados */}
+            {blacklist.length === 0 ? (
+              <Card className="p-8 text-center text-muted-foreground">
+                <ShieldBan className="h-8 w-8 mx-auto mb-2 opacity-40 text-emerald-500" />
+                <p className="text-sm font-medium">Nenhum número bloqueado na lista negra.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Sua base de contatos está 100% liberada para envios.
+                </p>
+              </Card>
+            ) : (
+              <div className="border border-border/60 rounded-xl overflow-hidden shadow-xs bg-card">
+                <div className="max-h-[500px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50 text-muted-foreground sticky top-0 border-b border-border/40">
+                      <tr>
+                        <th className="p-3 text-left font-semibold">Telefone / JID</th>
+                        <th className="p-3 text-left font-semibold">Motivo do Bloqueio</th>
+                        <th className="p-3 text-left font-semibold">Data do Registro</th>
+                        <th className="p-3 text-right font-semibold">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {blacklist.map((entry) => (
+                        <tr key={entry.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="p-3 font-mono">
+                            <span className="font-semibold text-foreground">{entry.phone}</span>
+                            <div className="text-[10px] text-muted-foreground">{entry.jid}</div>
+                          </td>
+                          <td className="p-3">
+                            <Badge
+                              variant="outline"
+                              className={
+                                entry.reason?.toLowerCase().includes("auto")
+                                  ? "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10 text-[10px]"
+                                  : "border-border/60 text-[10px]"
+                              }
+                            >
+                              {entry.reason || "Adicionado manualmente"}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-muted-foreground">
+                            {new Date(entry.createdAt).toLocaleString("pt-BR")}
+                          </td>
+                          <td className="p-3 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                              onClick={() => handleDeleteBlacklist(entry.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" /> Desbloquear
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -1593,6 +2471,41 @@ export default function BroadcastPage() {
                     </span>
                   </div>
                 </div>
+
+                {/* Informações adicionais do disparo: Áudio / Mídia / Agendamento */}
+                {(selectedLog.audioUrl || selectedLog.mediaUrl || selectedLog.scheduledAt) && (
+                  <div className="p-3 bg-muted/30 border border-border/40 rounded-lg flex flex-wrap gap-3 items-center text-xs">
+                    {selectedLog.audioUrl && (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-emerald-600 border-emerald-500/30 bg-emerald-50/10">
+                          {selectedLog.isPtt ? "Áudio PTT 🎙️" : "Arquivo de Áudio 🎵"}
+                        </Badge>
+                        <audio controls src={selectedLog.audioUrl} className="h-7 w-48" />
+                      </div>
+                    )}
+                    {selectedLog.mediaUrl && (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-blue-600 border-blue-500/30 bg-blue-50/10">
+                          Mídia 📎 ({selectedLog.mediaType || "arquivo"})
+                        </Badge>
+                        <a
+                          href={selectedLog.mediaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline text-xs font-medium"
+                        >
+                          Ver arquivo anexado
+                        </a>
+                      </div>
+                    )}
+                    {selectedLog.scheduledAt && (
+                      <div className="text-muted-foreground flex items-center gap-1">
+                        <CalendarClock className="h-3.5 w-3.5 text-blue-500" />
+                        Agendado para: {new Date(selectedLog.scheduledAt).toLocaleString("pt-BR")}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Botão de Reenviar Falhas */}
                 {selectedLog.failed > 0 && (
@@ -1691,6 +2604,52 @@ export default function BroadcastPage() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setSaveListDialogOpen(false)}>Cancelar</Button>
               <Button onClick={handleSaveContactList}>Salvar Lista</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* MODAL: ADICIONAR À LISTA NEGRA */}
+        <Dialog open={addBlacklistDialogOpen} onOpenChange={setAddBlacklistDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ShieldBan className="h-5 w-5 text-rose-500" />
+                Bloquear Número na Lista Negra
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Este número será ignorado em todos os disparos e campanhas futuras.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Telefone com DDD:</Label>
+                <Input
+                  placeholder="Ex: 5511999998888 ou 11999998888"
+                  value={newBlacklistPhone}
+                  onChange={(e) => setNewBlacklistPhone(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Motivo do Bloqueio:</Label>
+                <Input
+                  placeholder="Ex: Solicitou cancelamento por ligação / Não quer novidades"
+                  value={newBlacklistReason}
+                  onChange={(e) => setNewBlacklistReason(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddBlacklistDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                className="bg-rose-600 hover:bg-rose-700 text-white"
+                onClick={handleAddBlacklist}
+              >
+                Bloquear Número
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

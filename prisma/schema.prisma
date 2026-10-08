@@ -51,6 +51,7 @@ model User {
   sessionAccesses SessionAccess[]
   templates       MessageTemplate[]
   contactLists    ContactList[]
+  blacklists      Blacklist[]
 }
 
 model Session {
@@ -377,6 +378,14 @@ model BroadcastLog {
   batchPause  Int?                // e.g. pause duration in seconds
   mediaUrl    String?             @db.Text
   mediaType   String?             // image, video, document
+  audioUrl    String?             @db.Text
+  isPtt       Boolean             @default(false)     // Audio recorded live (PTT green mic)
+  sessionIds  Json?               // Multi-chip: array of sessionIds
+  scheduledAt DateTime?           // Scheduled broadcast
+  simulateTyping Boolean          @default(true)      // "composing" / "recording"
+  businessHoursOnly Boolean       @default(false)     // Only send during business hours
+  startHour   Int?                @default(8)
+  endHour     Int?                @default(20)
   startedAt   DateTime            @default(now())
   completedAt DateTime?
 
@@ -396,10 +405,14 @@ model BroadcastRecipient {
   status          String       @default("pending") // pending, sent, failed
   error           String?      @db.Text
   sentAt          DateTime?
+  imoviewAtendimentoId String?
+  imoviewClienteId     String?
+  imoviewCorretor      String?
 
   broadcastLog    BroadcastLog @relation(fields: [broadcastLogId], references: [id], onDelete: Cascade)
 
   @@index([broadcastLogId])
+  @@index([imoviewAtendimentoId])
 }
 
 // Reusable message templates
@@ -434,4 +447,34 @@ model ContactList {
 
   @@index([userId])
 }
+
+// Automatic & manual blacklist for opt-out protection
+model Blacklist {
+  id        String   @id @default(cuid())
+  userId    String
+  phone     String
+  jid       String
+  reason    String?  @default("Opt-out automático")
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, phone])
+  @@index([userId])
+  @@index([phone])
+}
+
+// Imoview CRM Integration Configuration
+model ImoviewConfig {
+  id                    String   @id @default("default")
+  apiKey                String?  @db.Text
+  baseUrl               String   @default("https://api.imoview.com.br")
+  isActive              Boolean  @default(true)
+  autoRecordInteraction Boolean  @default(true) // Registrar ocorrência no Imoview ao enviar WhatsApp
+  autoRecordResponse    Boolean  @default(true) // Registrar ocorrência no Imoview quando lead responder
+  autoNotifyBroker      Boolean  @default(true) // Avisar corretor quando lead responder
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 

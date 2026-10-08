@@ -2,8 +2,8 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { waManager } from "@/modules/whatsapp/manager";
 import { getAuthenticatedUser, canAccessSession } from "@/lib/api-auth";
-import { processPersonalizedMessage, sanitizePhoneNumber } from "@/lib/spintax";
-import type { AnyMessageContent } from "@whiskeysockets/baileys";
+import { sanitizePhoneNumber } from "@/lib/spintax";
+import { executeBroadcast } from "@/lib/broadcast-engine";
 import { z } from "zod";
 
 const recipientItemSchema = z.union([
@@ -16,17 +16,36 @@ const recipientItemSchema = z.union([
   }),
 ]);
 
-const broadcastBodySchema = z.object({
-  recipients: z.array(recipientItemSchema).min(1, "Pelo menos um destinatário é necessário"),
-  message: z.string().min(1, "Mensagem não pode ser vazia"),
-  delay: z.number().optional(), // legacy delay ms
-  minDelay: z.number().optional().default(2000), // ms (e.g. 2000 = 2s)
-  maxDelay: z.number().optional().default(5000), // ms (e.g. 5000 = 5s, can be up to 60000ms)
-  batchSize: z.number().optional().nullable(), // e.g. 20 msgs
-  batchPause: z.number().optional().nullable(), // e.g. 180 seconds pause
-  mediaUrl: z.string().optional().nullable(),
-  mediaType: z.string().optional().nullable(), // 'image' | 'video' | 'document'
-});
+const broadcastBodySchema = z
+  .object({
+    recipients: z.array(recipientItemSchema).min(1, "Pelo menos um destinatário é necessário"),
+    message: z.string().optional().default(""),
+    delay: z.number().optional(), // legacy delay ms
+    minDelay: z.number().optional().default(2000), // ms (e.g. 2000 = 2s)
+    maxDelay: z.number().optional().default(5000), // ms (e.g. 5000 = 5s)
+    batchSize: z.number().optional().nullable(), // e.g. 20 msgs
+    batchPause: z.number().optional().nullable(), // e.g. 180 seconds pause
+    mediaUrl: z.string().optional().nullable(),
+    mediaType: z.string().optional().nullable(), // 'image' | 'video' | 'document'
+    audioUrl: z.string().optional().nullable(),
+    isPtt: z.boolean().optional().default(false), // Native voice note
+    sessionIds: z.array(z.string()).optional().nullable(), // Multi-chip sessions
+    scheduledAt: z.string().optional().nullable(), // ISO string
+    simulateTyping: z.boolean().optional().default(true),
+    businessHoursOnly: z.boolean().optional().default(false),
+    startHour: z.number().optional().default(8),
+    endHour: z.number().optional().default(20),
+  })
+  .refine(
+    (data) =>
+      (data.message && data.message.trim().length > 0) ||
+      !!data.mediaUrl ||
+      !!data.audioUrl,
+    {
+      message: "Mensagem de texto, mídia ou áudio é obrigatório",
+      path: ["message"],
+    }
+  );
 
 export async function POST(
   request: NextRequest,
@@ -56,16 +75,49 @@ export async function POST(
       batchPause,
       mediaUrl,
       mediaType,
+      audioUrl,
+      isPtt,
+      sessionIds,
+      scheduledAt,
+      simulateTyping,
+      businessHoursOnly,
+      startHour,
+      endHour,
     } = parseResult.data;
 
+    // Check primary session access
     const canAccess = await canAccessSession(user.id, user.role, sessionId);
     if (!canAccess) {
       return NextResponse.json({ status: false, message: "Forbidden", error: "Forbidden" }, { status: 403 });
     }
 
-    const instance = waManager.getInstance(sessionId);
-    if (!instance?.socket) {
-      return NextResponse.json({ status: false, message: "Sessão do WhatsApp desconectada ou não pronta", error: "Session not ready" }, { status: 503 });
+    // Check all multi-chip sessions if specified
+    const allSelectedSessions = sessionIds && sessionIds.length > 0 ? sessionIds : [sessionId];
+    for (const sId of allSelectedSessions) {
+      const allowed = await canAccessSession(user.id, user.role, sId);
+      if (!allowed) {
+        return NextResponse.json(
+          { status: false, message: `Sem acesso à sessão ${sId}`, error: "Forbidden session" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Verify that at least one selected session is connected
+    const anyConnected = allSelectedSessions.some((sId) => {
+      const inst = waManager.getInstance(sId);
+      return !!inst?.socket;
+    });
+
+    if (!anyConnected) {
+      return NextResponse.json(
+        {
+          status: false,
+          message: "Nenhuma das sessões selecionadas está conectada no momento",
+          error: "No connected sessions",
+        },
+        { status: 503 }
+      );
     }
 
     // Normalize recipients list
@@ -92,7 +144,6 @@ export async function POST(
         variables = item.variables || {};
       }
 
-      // If item is already a full JID (e.g. 551199999999@s.whatsapp.net or group @g.us)
       let jid = "";
       let phone = "";
 
@@ -113,18 +164,50 @@ export async function POST(
     }
 
     if (normalizedRecipients.length === 0) {
-      return NextResponse.json({ status: false, message: "Nenhum destinatário válido encontrado", error: "No valid recipients" }, { status: 400 });
+      return NextResponse.json(
+        { status: false, message: "Nenhum destinatário válido encontrado", error: "No valid recipients" },
+        { status: 400 }
+      );
+    }
+
+    // Filter against Blacklist (Opt-out)
+    const blacklisted = await prisma.blacklist.findMany({
+      where: { userId: user.id },
+      select: { phone: true, jid: true },
+    });
+    const blacklistedPhones = new Set(blacklisted.map((b) => b.phone));
+    const blacklistedJids = new Set(blacklisted.map((b) => b.jid));
+
+    let blacklistedCount = 0;
+    const filteredRecipients = normalizedRecipients.filter((r) => {
+      const isBlocked = blacklistedPhones.has(r.phone) || blacklistedJids.has(r.jid);
+      if (isBlocked) blacklistedCount++;
+      return !isBlocked;
+    });
+
+    if (filteredRecipients.length === 0) {
+      return NextResponse.json(
+        {
+          status: false,
+          message: `Todos os ${blacklistedCount} contatos selecionados estão na Lista Negra (Opt-Out). Disparo não iniciado.`,
+          error: "All contacts blacklisted",
+        },
+        { status: 400 }
+      );
     }
 
     const minDelay = Math.max(1000, reqMinDelay || delay || 2000);
     const maxDelay = Math.max(minDelay, reqMaxDelay || delay || 5000);
 
+    const isScheduled = !!scheduledAt && new Date(scheduledAt) > new Date();
+    const scheduledDate = isScheduled ? new Date(scheduledAt!) : null;
+
     // Create BroadcastLog in DB
     const log = await prisma.broadcastLog.create({
       data: {
         sessionId,
-        message,
-        total: normalizedRecipients.length,
+        message: message || "",
+        total: filteredRecipients.length,
         delay: minDelay,
         minDelay,
         maxDelay,
@@ -132,9 +215,17 @@ export async function POST(
         batchPause: batchPause || null,
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
-        status: "running",
+        audioUrl: audioUrl || null,
+        isPtt: !!isPtt,
+        sessionIds: allSelectedSessions,
+        scheduledAt: scheduledDate,
+        simulateTyping,
+        businessHoursOnly,
+        startHour,
+        endHour,
+        status: isScheduled ? "scheduled" : "running",
         recipients: {
-          create: normalizedRecipients.map((r) => ({
+          create: filteredRecipients.map((r) => ({
             jid: r.jid,
             name: r.name || null,
             variables: r.variables ? JSON.parse(JSON.stringify(r.variables)) : null,
@@ -144,204 +235,25 @@ export async function POST(
       },
     });
 
-    const broadcastId = log.id;
-    const io = (global as any).io;
-
-    // Initial socket event
-    if (io) {
-      io.to(sessionId).emit("broadcast.progress", {
-        broadcastId,
-        status: "running",
-        total: normalizedRecipients.length,
-        sent: 0,
-        failed: 0,
-        current: null,
-        progress: 0,
-        startedAt: log.startedAt.toISOString(),
-      });
+    // Start background execution if not scheduled
+    if (!isScheduled) {
+      executeBroadcast(log.id).catch((err) =>
+        console.error(`[Broadcast] Execution error for ${log.id}:`, err)
+      );
     }
-
-    // Run processing loop in background
-    (async () => {
-      let sent = 0;
-      let failed = 0;
-      const errors: { jid: string; error: string }[] = [];
-
-      for (let i = 0; i < normalizedRecipients.length; i++) {
-        // 1. Check if broadcast status was changed (paused or cancelled)
-        let checkLog = await prisma.broadcastLog.findUnique({
-          where: { id: broadcastId },
-          select: { status: true },
-        });
-
-        if (checkLog?.status === "cancelled") {
-          console.log(`[Broadcast ${broadcastId}] Cancelled by user.`);
-          break;
-        }
-
-        // Handle paused state (wait until resumed or cancelled)
-        while (checkLog?.status === "paused") {
-          await new Promise((r) => setTimeout(r, 2000));
-          checkLog = await prisma.broadcastLog.findUnique({
-            where: { id: broadcastId },
-            select: { status: true },
-          });
-          if (checkLog?.status === "cancelled") break;
-        }
-
-        if (checkLog?.status === "cancelled") break;
-
-        const recipient = normalizedRecipients[i];
-        let personalizedText = "";
-
-        try {
-          // 2. Resolve Spintax and Variables dynamically per recipient
-          const allVars = {
-            ...(recipient.variables || {}),
-            nome: recipient.name || (recipient.variables as any)?.nome || "",
-            telefone: recipient.phone,
-          };
-
-          personalizedText = processPersonalizedMessage(message, allVars);
-
-          // 3. Construct message payload
-          let messageContent: AnyMessageContent;
-          if (mediaUrl) {
-            if (mediaType === "document") {
-              messageContent = {
-                document: { url: mediaUrl },
-                caption: personalizedText,
-                mimetype: "application/pdf",
-                fileName: "documento.pdf",
-              };
-            } else if (mediaType === "video") {
-              messageContent = {
-                video: { url: mediaUrl },
-                caption: personalizedText,
-              };
-            } else {
-              messageContent = {
-                image: { url: mediaUrl },
-                caption: personalizedText,
-              };
-            }
-          } else {
-            messageContent = { text: personalizedText };
-          }
-
-          // 4. Send message through Baileys
-          await instance.socket!.sendMessage(recipient.jid, messageContent);
-          sent++;
-
-          // 5. Update DB recipient with resolved personalized text
-          await prisma.broadcastRecipient.updateMany({
-            where: { broadcastLogId: broadcastId, jid: recipient.jid },
-            data: {
-              status: "sent",
-              sentAt: new Date(),
-              resolvedMessage: personalizedText,
-            },
-          });
-        } catch (e: any) {
-          failed++;
-          const errorMsg = e?.message || "Unknown error";
-          errors.push({ jid: recipient.jid, error: errorMsg });
-          console.error(`Failed to send broadcast to ${recipient.jid}:`, e);
-
-          await prisma.broadcastRecipient.updateMany({
-            where: { broadcastLogId: broadcastId, jid: recipient.jid },
-            data: {
-              status: "failed",
-              error: errorMsg,
-              resolvedMessage: personalizedText || null,
-            },
-          });
-        }
-
-        const progress = Math.round(((sent + failed) / normalizedRecipients.length) * 100);
-
-        // Update progress in BroadcastLog
-        await prisma.broadcastLog.update({
-          where: { id: broadcastId },
-          data: { sent, failed },
-        });
-
-        // Socket real-time progress update
-        if (io) {
-          io.to(sessionId).emit("broadcast.progress", {
-            broadcastId,
-            status: "running",
-            total: normalizedRecipients.length,
-            sent,
-            failed,
-            current: recipient.jid,
-            currentName: recipient.name || null,
-            currentMessage: personalizedText,
-            progress,
-          });
-        }
-
-        // 6. Delay handling between messages
-        if (i < normalizedRecipients.length - 1) {
-          // Check if batch pause should trigger
-          if (batchSize && batchPause && (i + 1) % batchSize === 0) {
-            const pauseSeconds = batchPause;
-            console.log(`[Broadcast ${broadcastId}] Pausa de segurança em lote por ${pauseSeconds}s...`);
-
-            if (io) {
-              io.to(sessionId).emit("broadcast.batch_pause", {
-                broadcastId,
-                pauseSeconds,
-                completedBatch: i + 1,
-              });
-            }
-
-            await new Promise((r) => setTimeout(r, pauseSeconds * 1000));
-          } else {
-            // Random delay between minDelay and maxDelay
-            const randomDelay =
-              minDelay >= maxDelay
-                ? minDelay
-                : Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-
-            await new Promise((r) => setTimeout(r, randomDelay));
-          }
-        }
-      }
-
-      // Mark final completion in DB
-      const finalLog = await prisma.broadcastLog.findUnique({
-        where: { id: broadcastId },
-        select: { status: true },
-      });
-
-      const finalStatus = finalLog?.status === "cancelled" ? "cancelled" : "completed";
-
-      await prisma.broadcastLog.update({
-        where: { id: broadcastId },
-        data: { status: finalStatus, sent, failed, completedAt: new Date() },
-      });
-
-      if (io) {
-        io.to(sessionId).emit("broadcast.progress", {
-          broadcastId,
-          status: finalStatus,
-          total: normalizedRecipients.length,
-          sent,
-          failed,
-          errors,
-          progress: 100,
-          completedAt: new Date().toISOString(),
-        });
-      }
-
-      console.log(`[Broadcast ${broadcastId}] Finalizado (${finalStatus}): ${sent} enviados, ${failed} falhas.`);
-    })();
 
     return NextResponse.json({
       status: true,
-      message: "Disparo iniciado com sucesso em segundo plano",
-      data: { broadcastId: log.id, total: normalizedRecipients.length },
+      message: isScheduled
+        ? `Disparo agendado com sucesso para ${scheduledDate?.toLocaleString("pt-BR")}`
+        : "Disparo iniciado com sucesso em segundo plano",
+      data: {
+        broadcastId: log.id,
+        total: filteredRecipients.length,
+        filteredBlacklist: blacklistedCount,
+        status: log.status,
+        scheduledAt: log.scheduledAt,
+      },
     });
   } catch (e: any) {
     console.error("Broadcast error", e);

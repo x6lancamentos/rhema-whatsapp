@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthenticatedUser, canAccessSession } from "@/lib/api-auth";
+import { executeBroadcast } from "@/lib/broadcast-engine";
 import { z } from "zod";
 
 const controlSchema = z.object({
@@ -43,6 +44,12 @@ export async function POST(
         ...(action === "cancel" ? { completedAt: new Date() } : {}),
       },
     });
+
+    if (action === "resume") {
+      executeBroadcast(broadcastId).catch((e) =>
+        console.error("[BroadcastControl] Resume broadcast error:", e)
+      );
+    }
 
     const io = (global as any).io;
     if (io) {
