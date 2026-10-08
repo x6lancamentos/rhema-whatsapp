@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Bot, Github, Zap, Shield, Globe, MessageSquare, Clock, Code, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import fs from "fs";
 import path from "path";
 
@@ -52,6 +53,7 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <Link href="/auth/login">
               <Button size="sm" className="rounded-full px-6 bg-foreground text-background hover:bg-foreground/90 shadow-xl shadow-foreground/10 hidden sm:flex">
                 Sign In

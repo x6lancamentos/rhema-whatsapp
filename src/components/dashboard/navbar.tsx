@@ -12,6 +12,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { io, Socket } from "socket.io-client";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface NavbarProps {
     appName?: string;
@@ -147,6 +148,8 @@ export function Navbar({ appName }: NavbarProps) {
                 <span className="hidden sm:inline"><RealtimeClock /></span>
                 <SessionSelector />
                 <div className="h-6 w-px bg-border/50 hidden sm:block" />
+
+                <ThemeToggle variant="dropdown" />
 
                 <Popover open={isOpen} onOpenChange={setIsOpen}>
                     <PopoverTrigger asChild>

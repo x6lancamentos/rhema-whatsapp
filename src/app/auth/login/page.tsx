@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Bot, ArrowRight, Loader2 } from "lucide-react";
 import Link from 'next/link';
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const formSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -64,6 +65,11 @@ function LoginForm() {
 
   return (
     <div className="flex items-center justify-center min-h-screen relative overflow-hidden bg-background">
+      {/* Theme Toggle */}
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
+
       {/* Background Orbs */}
       <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-[40rem] h-[40rem] bg-primary/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 w-[30rem] h-[30rem] bg-blue-500/20 rounded-full blur-[100px] pointer-events-none" />
