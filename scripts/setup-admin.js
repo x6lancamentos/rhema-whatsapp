@@ -17,12 +17,16 @@ async function main() {
     });
 
     if (existingUser) {
-        console.log(`User ${email} found. Promoting to SUPERADMIN...`);
+        console.log(`User ${email} found. Updating role and password...`);
+        const updateData = { role: 'SUPERADMIN' };
+        if (password) {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
         await prisma.user.update({
             where: { email },
-            data: { role: 'SUPERADMIN' }
+            data: updateData
         });
-        console.log("User promoted successfully!");
+        console.log("User updated successfully!");
     } else {
         if (!password) {
             console.error("Password required for new user. Usage: node scripts/setup-admin.js <email> <password>");
