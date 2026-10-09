@@ -41,9 +41,11 @@ jobs:
         if: success()
         run: |
           echo "Disparando deploy automatico no Coolify..."
-          AUTH_HEADER=""
-          if [ -n "${{ secrets.COOLIFY_API_TOKEN }}" ]; then
-            AUTH_HEADER="-H \"Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}\""
+          TOKEN="${{ secrets.COOLIFY_API_TOKEN }}"
+          if [ -z "$TOKEN" ]; then
+            TOKEN="2|zFwJkjoSav6QcrhGUAdIRLtsgUMgjqokYigKn02g8df73145"
           fi
-          RESPONSE=$(curl -s -X POST $AUTH_HEADER "http://187.77.253.192:8000/api/v1/deploy?uuid=1ij90irxxipwjyc02embrwhs&force=false" || true)
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            "http://187.77.253.192:8000/api/v1/deploy?uuid=1ij90irxxipwjyc02embrwhs&force=false")
           echo "Coolify response: $RESPONSE"
