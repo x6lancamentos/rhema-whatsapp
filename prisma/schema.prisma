@@ -12,6 +12,9 @@ datasource db {
 
 enum Role {
   SUPERADMIN
+  ADMIN
+  PRE_VENDAS
+  CORRETOR
   OWNER
   STAFF
 }
@@ -36,22 +39,34 @@ enum MessageStatus {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String?
-  email     String   @unique
-  password  String
-  role      Role     @default(OWNER)
-  apiKey    String?  @unique // API Key for authentication
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  name                  String?
+  email                 String   @unique
+  password              String
+  role                  Role     @default(CORRETOR)
+  apiKey                String?  @unique // API Key for authentication
+  imoviewCorretorCodigo String?
+  imoviewCorretorNome   String?
+  permissionsOverrides  Json?    // Custom granular overrides { [permissionKey]: boolean }
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
   
-  sessions  Session[]
-  webhooks  Webhook[]
-  notifications Notification[]
+  sessions        Session[]
+  webhooks        Webhook[]
+  notifications   Notification[]
   sessionAccesses SessionAccess[]
   templates       MessageTemplate[]
   contactLists    ContactList[]
   blacklists      Blacklist[]
+}
+
+model RolePermissionConfig {
+  id          String   @id @default(cuid())
+  role        Role     @unique
+  permissions Json     // Custom permissions dictionary for role
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Session {

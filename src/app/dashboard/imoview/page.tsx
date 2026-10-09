@@ -125,6 +125,8 @@ export default function ImoviewIntegrationPage() {
   const [diasFiltroLeads, setDiasFiltroLeads] = useState(15);
   const [corretorFiltro, setCorretorFiltro] = useState("");
   const [searchLeadTerm, setSearchLeadTerm] = useState("");
+  const [restrictedToBroker, setRestrictedToBroker] = useState<string | null>(null);
+  const [canExport, setCanExport] = useState<boolean>(true);
 
   // Properties & Owners State
   const [properties, setProperties] = useState<ImoviewProperty[]>([]);
@@ -247,6 +249,12 @@ export default function ImoviewIntegrationPage() {
         const data = json.data || [];
         setLeads(data);
         setSelectedLeadIds(data.map((l: ImoviewLead) => l.atendimentoId));
+        if (json.restrictedToBroker !== undefined) {
+          setRestrictedToBroker(json.restrictedToBroker);
+        }
+        if (json.canExport !== undefined) {
+          setCanExport(json.canExport);
+        }
         if (json.configured === false) {
           setActiveTab("config");
           toast.warning("Configure a Chave de API do Imoview para buscar os leads.");
@@ -302,6 +310,12 @@ export default function ImoviewIntegrationPage() {
         const json = await res.json();
         const data = json.data || [];
         setProperties(data);
+        if (json.restrictedToBroker !== undefined) {
+          setRestrictedToBroker(json.restrictedToBroker);
+        }
+        if (json.canExport !== undefined) {
+          setCanExport(json.canExport);
+        }
         // Seleciona por padrão contatos com telefone válido
         const withPhones = data
           .filter((p: ImoviewProperty) => p.proprietarioTelefone && p.proprietarioTelefone.replace(/\D/g, "").length >= 8)
@@ -808,18 +822,32 @@ export default function ImoviewIntegrationPage() {
                   <div className="sm:col-span-4 space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
                       <UserCheck className="h-3.5 w-3.5 text-primary" /> Corretor Responsável:
+                      {restrictedToBroker && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 border-emerald-500/40 text-emerald-600 bg-emerald-500/10 font-bold ml-auto">
+                          Carteira Restrita
+                        </Badge>
+                      )}
                     </Label>
                     <select
-                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={corretorFiltro}
+                      className={`w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                        restrictedToBroker ? "bg-muted text-muted-foreground cursor-not-allowed font-medium" : ""
+                      }`}
+                      value={restrictedToBroker ? "" : corretorFiltro}
                       onChange={(e) => setCorretorFiltro(e.target.value)}
+                      disabled={!!restrictedToBroker}
                     >
-                      <option value="">Todos os Corretores</option>
-                      {brokers.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.nome}
-                        </option>
-                      ))}
+                      {restrictedToBroker ? (
+                        <option value="">🔒 Apenas seus leads ({restrictedToBroker})</option>
+                      ) : (
+                        <>
+                          <option value="">Todos os Corretores</option>
+                          {brokers.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.nome}
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -1066,18 +1094,32 @@ export default function ImoviewIntegrationPage() {
                   <div className="sm:col-span-3 space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
                       <UserCheck className="h-3.5 w-3.5 text-primary" /> Corretor Captador:
+                      {restrictedToBroker && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 border-emerald-500/40 text-emerald-600 bg-emerald-500/10 font-bold ml-auto">
+                          Carteira Restrita
+                        </Badge>
+                      )}
                     </Label>
                     <select
-                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={corretorCaptadorFiltro}
+                      className={`w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                        restrictedToBroker ? "bg-muted text-muted-foreground cursor-not-allowed font-medium" : ""
+                      }`}
+                      value={restrictedToBroker ? "" : corretorCaptadorFiltro}
                       onChange={(e) => setCorretorCaptadorFiltro(e.target.value)}
+                      disabled={!!restrictedToBroker}
                     >
-                      <option value="">Todos os Corretores / Captadores</option>
-                      {brokers.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.nome}
-                        </option>
-                      ))}
+                      {restrictedToBroker ? (
+                        <option value="">🔒 Apenas seus imóveis ({restrictedToBroker})</option>
+                      ) : (
+                        <>
+                          <option value="">Todos os Corretores / Captadores</option>
+                          {brokers.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.nome}
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
 

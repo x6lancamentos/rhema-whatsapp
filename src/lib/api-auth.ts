@@ -2,11 +2,15 @@ import { prisma } from "./prisma";
 import { NextRequest } from "next/server";
 import { auth } from "./auth";
 import { logger } from "./logger";
+import { checkUserPermission, getUserEffectivePermissions, PermissionKey } from "./permissions";
 
 // Role hierarchy for permission checks
 const ROLE_HIERARCHY = {
-    SUPERADMIN: 3,
-    OWNER: 2,
+    SUPERADMIN: 4,
+    ADMIN: 3,
+    OWNER: 3,
+    PRE_VENDAS: 2,
+    CORRETOR: 2,
     STAFF: 1
 } as const;
 
@@ -25,8 +29,19 @@ export async function validateApiKey(request: NextRequest) {
     try {
         const user = await prisma.user.findUnique({
             where: { apiKey },
-            select: { id: true, email: true, name: true, role: true }
+            select: { 
+                id: true, 
+                email: true, 
+                name: true, 
+                role: true,
+                imoviewCorretorCodigo: true,
+                imoviewCorretorNome: true,
+                permissionsOverrides: true,
+                isActive: true
+            }
         });
+
+        if (!user || user.isActive === false) return null;
 
         return user;
     } catch (error) {
@@ -50,13 +65,22 @@ export async function getAuthenticatedUser(request?: NextRequest) {
     // Fall back to session auth
     const session = await auth();
     if (session?.user?.id) {
-        // Fetch full user data including role
+        // Fetch full user data including role and imoview mapping
         const user = await prisma.user.findUnique({
             where: { id: session.user.id },
-            select: { id: true, email: true, name: true, role: true }
+            select: { 
+                id: true, 
+                email: true, 
+                name: true, 
+                role: true,
+                imoviewCorretorCodigo: true,
+                imoviewCorretorNome: true,
+                permissionsOverrides: true,
+                isActive: true
+            }
         });
 
-        if (user) {
+        if (user && user.isActive !== false) {
             return { ...user, authMethod: "session" as const };
         }
     }
@@ -74,10 +98,17 @@ export function hasRole(userRole: string, requiredRole: Role): boolean {
 }
 
 /**
- * Check if user is admin (SUPERADMIN or has admin privileges)
+ * Check if user is admin (SUPERADMIN or ADMIN or OWNER)
  */
 export function isAdmin(userRole: string): boolean {
-    return userRole === "SUPERADMIN";
+    return userRole === "SUPERADMIN" || userRole === "ADMIN" || userRole === "OWNER";
+}
+
+/**
+ * Check if user can execute a specific permission
+ */
+export async function canUser(userId: string, key: PermissionKey): Promise<boolean> {
+    return checkUserPermission(userId, key);
 }
 
 /**

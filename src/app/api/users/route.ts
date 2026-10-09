@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthenticatedUser, isAdmin } from "@/lib/api-auth";
+import { getAuthenticatedUser, isAdmin, canUser } from "@/lib/api-auth";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
@@ -8,14 +8,20 @@ const createUserSchema = z.object({
     name: z.string().min(2),
     email: z.string().email(),
     password: z.string().min(6),
-    role: z.enum(["SUPERADMIN", "OWNER", "STAFF"]).default("OWNER"),
+    role: z.enum(["SUPERADMIN", "ADMIN", "PRE_VENDAS", "CORRETOR", "OWNER", "STAFF"]).default("CORRETOR"),
+    imoviewCorretorCodigo: z.string().optional().nullable(),
+    imoviewCorretorNome: z.string().optional().nullable(),
 });
 
 export async function GET(request: NextRequest) {
     const user = await getAuthenticatedUser(request);
 
-    // Only SUPERADMIN can list users
-    if (!user || !isAdmin(user.role)) {
+    if (!user) {
+        return NextResponse.json({ status: false, message: "Unauthorized", error: "Unauthorized" }, { status: 401 });
+    }
+
+    const hasViewPermission = await canUser(user.id, "users.view");
+    if (!isAdmin(user.role) && !hasViewPermission) {
         return NextResponse.json({ status: false, message: "Unauthorized", error: "Unauthorized" }, { status: 403 });
     }
 
@@ -27,7 +33,20 @@ export async function GET(request: NextRequest) {
                 name: true,
                 email: true,
                 role: true,
+                imoviewCorretorCodigo: true,
+                imoviewCorretorNome: true,
+                isActive: true,
+                permissionsOverrides: true,
                 createdAt: true,
+                sessions: {
+                    select: {
+                        id: true,
+                        sessionId: true,
+                        name: true,
+                        status: true,
+                        updatedAt: true,
+                    }
+                },
                 _count: {
                     select: { sessions: true }
                 }
@@ -43,8 +62,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     const user = await getAuthenticatedUser(request);
 
-    // Only SUPERADMIN can create users
-    if (!user || !isAdmin(user.role)) {
+    if (!user) {
+        return NextResponse.json({ status: false, message: "Unauthorized", error: "Unauthorized" }, { status: 401 });
+    }
+
+    const hasManagePermission = await canUser(user.id, "users.manage");
+    if (!isAdmin(user.role) && !hasManagePermission) {
         return NextResponse.json({ status: false, message: "Unauthorized", error: "Unauthorized" }, { status: 403 });
     }
 
@@ -56,7 +79,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ status: false, message: "Validation error", error: parseResult.error.flatten() }, { status: 400 });
         }
 
-        const { name, email, password, role } = parseResult.data;
+        const { name, email, password, role, imoviewCorretorCodigo, imoviewCorretorNome } = parseResult.data;
 
         // Check if email exists
         const existing = await prisma.user.findUnique({ where: { email } });
@@ -71,13 +94,18 @@ export async function POST(request: NextRequest) {
                 name,
                 email,
                 password: hashedPassword,
-                role: role as any
+                role: role as any,
+                imoviewCorretorCodigo: imoviewCorretorCodigo || null,
+                imoviewCorretorNome: imoviewCorretorNome || null,
             },
             select: {
                 id: true,
                 name: true,
                 email: true,
                 role: true,
+                imoviewCorretorCodigo: true,
+                imoviewCorretorNome: true,
+                isActive: true,
                 createdAt: true
             }
         });

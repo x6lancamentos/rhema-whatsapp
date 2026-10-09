@@ -125,4 +125,28 @@ O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendim
 
 ---
 
+## 8. 🛡️ Níveis de Permissões, Multi-Corretor & Gestão de Equipe (RBAC / DLP)
+
+- [x] **Isolamento Total Multi-Corretor**:
+  - Cada corretor conecta seu próprio WhatsApp pessoal/corporativo via QR Code isolado.
+  - Nenhum corretor acessa, visualiza ou dispara pelo WhatsApp ou conversas de outro corretor.
+  - Administradores visualizam painel de monitoramento de chips online (sem bisbilhotar conversas particulares).
+- [x] **Perfil Pré-Vendas / Recepção (Camila)**:
+  - Papel dedicado `PRE_VENDAS` para qualificação inicial e primeiro atendimento de leads.
+  - Acesso de visualização ampliada dos leads do Imoview para triagem e distribuição aos corretores.
+  - Exportação de planilhas bloqueada por padrão para segurança de dados.
+- [x] **Matriz Visual de Permissões por Toggles**:
+  - Configuração granular de permissões por Nível/Perfil (`ADMIN`, `PRE_VENDAS`, `CORRETOR`, `STAFF`) com switches interativos em tempo real.
+  - Possibilidade de overrides individuais por usuário (permissões customizadas para membros específicos).
+- [x] **Isolamento de Carteiras no Imoview CRM**:
+  - Corretor com permissão restrita enxerga **estritamente seus próprios leads e imóveis sob sua captação**.
+  - Dropdowns de corretores travados automaticamente para o corretor logado com badge de segurança.
+- [x] **Proteção contra Vazamento de Dados (DLP - Data Loss Prevention)**:
+  - Permissão específica `imoview.export_sheets`: controle de quem pode baixar planilhas Excel da base de clientes da imobiliária.
+- [x] **Dashboard de Produtividade da Equipe**:
+  - Painel executivo para gestores com métricas individuais de cada corretor: status do chip, campanhas disparadas, mensagens enviadas, respostas de leads e taxa percentual de conversão.
+
+---
+
 *Última atualização: Outubro de 2026 — Antigravity Pair Programming*
+
