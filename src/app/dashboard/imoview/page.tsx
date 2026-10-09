@@ -43,6 +43,8 @@ import {
   X,
   FilterX,
   SlidersHorizontal,
+  MapPin,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SessionGuard } from "@/components/dashboard/session-guard";
@@ -88,6 +90,9 @@ interface ImoviewProperty {
   proprietarioNome: string;
   proprietarioTelefone: string;
   fotoPrincipal?: string;
+  corretorNome?: string;
+  corretorId?: string;
+  situacao?: string;
 }
 
 interface MessageTemplate {
@@ -129,6 +134,10 @@ export default function ImoviewIntegrationPage() {
   const abortPropsRef = useRef<AbortController | null>(null);
 
   const [origemFiltro, setOrigemFiltro] = useState<"proprietarios" | "imoveis">("proprietarios");
+  const [corretorCaptadorFiltro, setCorretorCaptadorFiltro] = useState("");
+  const [tipoImovelFiltro, setTipoImovelFiltro] = useState("");
+  const [bairroFiltro, setBairroFiltro] = useState("");
+  const [situacaoFiltro, setSituacaoFiltro] = useState("");
   const [periodoModo, setPeriodoModo] = useState<"presets" | "custom_days" | "custom_range">("presets");
   const [diasFiltroProps, setDiasFiltroProps] = useState(0); // 0 = todos, 15, 30, 60, 90, 180
   const [diasMinimosCustom, setDiasMinimosCustom] = useState("");
@@ -138,7 +147,6 @@ export default function ImoviewIntegrationPage() {
   const [limiteFiltroProps, setLimiteFiltroProps] = useState(100);
   const [apenasComTelefoneFiltro, setApenasComTelefoneFiltro] = useState(true);
   const [finalidadeFiltro, setFinalidadeFiltro] = useState("0"); // 0 = todos, 2 = Venda, 1 = Locacao
-  const [tipoFiltro, setTipoFiltro] = useState("");
   const [searchPropTerm, setSearchPropTerm] = useState("");
 
   // Templates list from API
@@ -280,7 +288,10 @@ export default function ImoviewIntegrationPage() {
       }
 
       if (finalidadeFiltro && finalidadeFiltro !== "0") params.set("finalidade", finalidadeFiltro);
-      if (tipoFiltro) params.set("tipo", tipoFiltro);
+      if (corretorCaptadorFiltro) params.set("corretorId", corretorCaptadorFiltro);
+      if (tipoImovelFiltro) params.set("tipo", tipoImovelFiltro);
+      if (bairroFiltro) params.set("bairro", bairroFiltro);
+      if (situacaoFiltro) params.set("situacao", situacaoFiltro);
       if (searchPropTerm) params.set("termo", searchPropTerm);
 
       const res = await fetch(`/api/integrations/imoview/proprietarios?${params.toString()}`, {
@@ -318,6 +329,10 @@ export default function ImoviewIntegrationPage() {
     }
   }, [
     origemFiltro,
+    corretorCaptadorFiltro,
+    tipoImovelFiltro,
+    bairroFiltro,
+    situacaoFiltro,
     limiteFiltroProps,
     apenasComTelefoneFiltro,
     periodoModo,
@@ -327,7 +342,6 @@ export default function ImoviewIntegrationPage() {
     dataInicioCustom,
     dataFimCustom,
     finalidadeFiltro,
-    tipoFiltro,
     searchPropTerm,
   ]);
 
@@ -342,6 +356,10 @@ export default function ImoviewIntegrationPage() {
 
   const handleResetFilters = () => {
     setOrigemFiltro("proprietarios");
+    setCorretorCaptadorFiltro("");
+    setTipoImovelFiltro("");
+    setBairroFiltro("");
+    setSituacaoFiltro("");
     setPeriodoModo("presets");
     setDiasFiltroProps(0);
     setDiasMinimosCustom("");
@@ -462,6 +480,18 @@ export default function ImoviewIntegrationPage() {
       const hasPhone = p.proprietarioTelefone && p.proprietarioTelefone.replace(/\D/g, "").length >= 8;
       if (!hasPhone) return false;
     }
+    if (corretorCaptadorFiltro && p.corretorId && p.corretorId !== corretorCaptadorFiltro) {
+      return false;
+    }
+    if (tipoImovelFiltro && !p.tipo.toLowerCase().includes(tipoImovelFiltro.toLowerCase())) {
+      return false;
+    }
+    if (bairroFiltro && !p.bairro.toLowerCase().includes(bairroFiltro.toLowerCase())) {
+      return false;
+    }
+    if (situacaoFiltro && p.situacao && !p.situacao.toLowerCase().includes(situacaoFiltro.toLowerCase())) {
+      return false;
+    }
     if (!searchPropTerm) return true;
     const term = searchPropTerm.toLowerCase();
     return (
@@ -470,7 +500,8 @@ export default function ImoviewIntegrationPage() {
       p.proprietarioNome.toLowerCase().includes(term) ||
       p.proprietarioTelefone.includes(term) ||
       p.bairro.toLowerCase().includes(term) ||
-      p.cidade.toLowerCase().includes(term)
+      p.cidade.toLowerCase().includes(term) ||
+      (p.corretorNome && p.corretorNome.toLowerCase().includes(term))
     );
   });
 
@@ -648,6 +679,9 @@ export default function ImoviewIntegrationPage() {
             vagas: p.vagas || "",
             dias_sem_atualizacao: String(p.diasSemAtualizacao),
             data_ultima_alteracao: p.dataUltimaAlteracao || "",
+            corretor: p.corretorNome || "Rhema Imóveis",
+            corretor_captador: p.corretorNome || "Rhema Imóveis",
+            situacao: p.situacao || "Disponível",
           },
         };
       });
@@ -1011,7 +1045,7 @@ export default function ImoviewIntegrationPage() {
             {/* Painel de Filtros dos Proprietários */}
             <Card className="border-border/60 shadow-xs">
               <CardContent className="p-4 space-y-4">
-                {/* Linha Superior: Origem, Finalidade, Quantidade Máxima e Ações Principais */}
+                {/* Linha 1: Origem dos Dados, Corretor Captador, Tipo de Imóvel e Finalidade */}
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                   {/* Origem dos Dados */}
                   <div className="sm:col-span-3 space-y-1">
@@ -1024,7 +1058,48 @@ export default function ImoviewIntegrationPage() {
                       onChange={(e) => setOrigemFiltro(e.target.value as "proprietarios" | "imoveis")}
                     >
                       <option value="proprietarios">Proprietários (Base CRM - WhatsApp)</option>
-                      <option value="imoveis">Catálogo de Imóveis (Portfólio)</option>
+                      <option value="imoveis">Catálogo de Imóveis (Portfólio & Captações)</option>
+                    </select>
+                  </div>
+
+                  {/* Corretor Captador */}
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                      <UserCheck className="h-3.5 w-3.5 text-primary" /> Corretor Captador:
+                    </Label>
+                    <select
+                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={corretorCaptadorFiltro}
+                      onChange={(e) => setCorretorCaptadorFiltro(e.target.value)}
+                    >
+                      <option value="">Todos os Corretores / Captadores</option>
+                      {brokers.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Tipo de Imóvel */}
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                      <Home className="h-3.5 w-3.5 text-primary" /> Tipo de Imóvel:
+                    </Label>
+                    <select
+                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={tipoImovelFiltro}
+                      onChange={(e) => setTipoImovelFiltro(e.target.value)}
+                    >
+                      <option value="">Todos os Tipos de Imóvel</option>
+                      <option value="Apartamento">Apartamento</option>
+                      <option value="Casa">Casa</option>
+                      <option value="Sobrado">Sobrado</option>
+                      <option value="Terreno">Terreno</option>
+                      <option value="Comercial">Comercial / Sala</option>
+                      <option value="Cobertura">Cobertura</option>
+                      <option value="Kitnet">Kitnet / Studio</option>
+                      <option value="Chácara">Chácara / Sítio</option>
                     </select>
                   </div>
 
@@ -1041,6 +1116,51 @@ export default function ImoviewIntegrationPage() {
                       <option value="0">Venda e Locação (Todos)</option>
                       <option value="2">Apenas Venda</option>
                       <option value="1">Apenas Locação</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Linha 2: Bairro / Região, Situação do Imóvel, Limite Máximo e Ações de Busca */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                  {/* Bairro / Região */}
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                      <MapPin className="h-3.5 w-3.5 text-primary" /> Bairro / Região:
+                    </Label>
+                    <select
+                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={bairroFiltro}
+                      onChange={(e) => setBairroFiltro(e.target.value)}
+                    >
+                      <option value="">Todos os Bairros</option>
+                      <option value="Gonzaga">Gonzaga</option>
+                      <option value="Boqueirão">Boqueirão</option>
+                      <option value="Ponta da Praia">Ponta da Praia</option>
+                      <option value="Embaré">Embaré</option>
+                      <option value="Aparecida">Aparecida</option>
+                      <option value="Campo Grande">Campo Grande</option>
+                      <option value="Marapé">Marapé</option>
+                      <option value="Pompeia">Pompeia</option>
+                      <option value="Encruzilhada">Encruzilhada</option>
+                      <option value="José Menino">José Menino</option>
+                      <option value="Vila Rica">Vila Rica</option>
+                    </select>
+                  </div>
+
+                  {/* Situação do Imóvel */}
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                      <Tag className="h-3.5 w-3.5 text-primary" /> Situação do Imóvel:
+                    </Label>
+                    <select
+                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={situacaoFiltro}
+                      onChange={(e) => setSituacaoFiltro(e.target.value)}
+                    >
+                      <option value="">Todas as Situações</option>
+                      <option value="Vago">Vago / Disponível</option>
+                      <option value="Alugado">Alugado</option>
+                      <option value="Ocupado">Ocupado</option>
                     </select>
                   </div>
 
@@ -1363,6 +1483,7 @@ export default function ImoviewIntegrationPage() {
                           />
                         </th>
                         <th className="p-3 text-left font-semibold">Imóvel & Código</th>
+                        <th className="p-3 text-left font-semibold">Captador / Responsável</th>
                         <th className="p-3 text-left font-semibold">Localização</th>
                         <th className="p-3 text-left font-semibold">Finalidade / Valor</th>
                         <th className="p-3 text-center font-semibold">Sem Atualização</th>
@@ -1407,8 +1528,28 @@ export default function ImoviewIntegrationPage() {
                               </div>
                             </td>
                             <td className="p-3">
+                              {prop.corretorNome ? (
+                                <div className="flex items-center gap-1.5 text-xs text-foreground font-semibold">
+                                  <UserCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  <span>{prop.corretorNome}</span>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+                                  <Building2 className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                                  Rhema Imóveis
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3">
                               <div className="font-medium text-foreground">{prop.bairro || "Santos"}</div>
-                              <div className="text-[10px] text-muted-foreground">{prop.cidade || "SP"}</div>
+                              <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                                <span>{prop.cidade || "SP"}</span>
+                                {prop.situacao && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/30 text-primary">
+                                    {prop.situacao}
+                                  </Badge>
+                                )}
+                              </div>
                             </td>
                             <td className="p-3">
                               <div className="font-semibold text-emerald-600 dark:text-emerald-400">

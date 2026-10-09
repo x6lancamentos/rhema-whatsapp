@@ -17,6 +17,9 @@ export async function GET(request: NextRequest) {
     const dataFim = searchParams.get("dataFim") || undefined;
     const finalidade = searchParams.get("finalidade") || "0";
     const tipo = searchParams.get("tipo") || undefined;
+    const bairro = searchParams.get("bairro") || undefined;
+    const situacao = searchParams.get("situacao") || undefined;
+    const corretorId = searchParams.get("corretorId") || undefined;
     const termo = searchParams.get("termo") || undefined;
     const limite = parseInt(searchParams.get("limite") || "100", 10);
     const origem = (searchParams.get("origem") as "proprietarios" | "imoveis") || "proprietarios";
@@ -39,6 +42,9 @@ export async function GET(request: NextRequest) {
       dataFim,
       finalidade,
       tipo,
+      bairro,
+      situacao,
+      corretorId,
       termo,
       limite,
       origem,

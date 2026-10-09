@@ -45,6 +45,9 @@ export interface ImoviewProperty {
   proprietarioNome: string;
   proprietarioTelefone: string;
   fotoPrincipal?: string;
+  corretorNome?: string;
+  corretorId?: string;
+  situacao?: string;
 }
 
 export async function getImoviewConfig() {
@@ -160,34 +163,38 @@ export async function fetchImoviewBrokers(): Promise<ImoviewBroker[]> {
 
   // Fetch recent pages to extract active brokers
   for (const finalidade of ["2", "1"]) {
-    try {
-      const u = new URL(`${cleanBase}/Atendimento/RetornarAtendimentos`);
-      u.searchParams.set("numeroPagina", "1");
-      u.searchParams.set("numeroRegistros", "20");
-      u.searchParams.set("finalidade", finalidade);
-      u.searchParams.set("fase", "0");
-      u.searchParams.set("situacao", "1");
+    for (let page = 1; page <= 3; page++) {
+      try {
+        const u = new URL(`${cleanBase}/Atendimento/RetornarAtendimentos`);
+        u.searchParams.set("numeroPagina", String(page));
+        u.searchParams.set("numeroRegistros", "20");
+        u.searchParams.set("finalidade", finalidade);
+        u.searchParams.set("fase", "0");
+        u.searchParams.set("situacao", "1");
 
-      const res = await fetch(u.toString(), { method: "GET", headers });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.lista && Array.isArray(data.lista)) {
-          for (const item of data.lista) {
-            if (item.corretor && item.corretorcodigo) {
-              brokersMap.set(String(item.corretorcodigo), String(item.corretor).trim());
+        const res = await fetch(u.toString(), { method: "GET", headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.lista && Array.isArray(data.lista)) {
+            for (const item of data.lista) {
+              if (item.corretor && item.corretorcodigo) {
+                brokersMap.set(String(item.corretorcodigo), String(item.corretor).trim());
+              }
             }
           }
         }
+      } catch {
+        // Continue
       }
-    } catch {
-      // Continue
     }
   }
 
-  return Array.from(brokersMap.entries()).map(([id, nome]) => ({
-    id,
-    nome,
-  }));
+  return Array.from(brokersMap.entries())
+    .map(([id, nome]) => ({
+      id,
+      nome,
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
 }
 
 export async function fetchImoviewStalledLeads(options: {
@@ -359,6 +366,9 @@ export async function fetchImoviewProperties(options: {
   finalidade?: string; // "1" = Locação, "2" = Venda, "0" = Todos
   limite?: number;
   tipo?: string;
+  bairro?: string;
+  situacao?: string;
+  corretorId?: string;
   termo?: string;
   origem?: "proprietarios" | "imoveis";
   somenteComTelefone?: boolean;
@@ -375,9 +385,17 @@ export async function fetchImoviewProperties(options: {
   const endDate = options.dataFim ? new Date(options.dataFim) : null;
   if (endDate) endDate.setHours(23, 59, 59, 999);
 
+  // Mapear nomes de corretores para exibição
+  const brokers = await fetchImoviewBrokers();
+  const brokerMap = new Map<string, string>();
+  for (const b of brokers) {
+    brokerMap.set(b.id, b.nome);
+  }
+
   const allProperties: ImoviewProperty[] = [];
   const now = Date.now();
-  const origem = options.origem || "proprietarios";
+  // Se corretorId for informado, a busca de captações no Imoview se dá via catálogo de Imóveis (codigocaptador)
+  const origem = options.corretorId ? "imoveis" : (options.origem || "proprietarios");
 
   if (origem === "proprietarios") {
     // Tipos de relacionamento no Imoview:
@@ -438,12 +456,19 @@ export async function fetchImoviewProperties(options: {
               continue;
             }
 
+            // Filtro por bairro se informado
+            const itemBairro = item.enderecos?.[0]?.bairro || "";
+            if (options.bairro && itemBairro && !itemBairro.toLowerCase().includes(options.bairro.toLowerCase())) {
+              continue;
+            }
+
             if (options.termo) {
               const q = options.termo.toLowerCase();
               const match =
                 String(item.codigo).includes(q) ||
                 propNome.toLowerCase().includes(q) ||
-                rawPhone.includes(q);
+                rawPhone.includes(q) ||
+                itemBairro.toLowerCase().includes(q);
               if (!match) continue;
             }
 
@@ -458,7 +483,7 @@ export async function fetchImoviewProperties(options: {
               tipo: finalidadeNome,
               finalidade: finalidadeNome,
               valor: `${qtdImoveis} imóvel(is)`,
-              bairro: item.enderecos?.[0]?.bairro || "Santos",
+              bairro: itemBairro || "Santos",
               cidade: item.enderecos?.[0]?.cidade || "SP",
               dataUltimaAlteracao: dateStr || undefined,
               diasSemAtualizacao: diffDays,
@@ -475,13 +500,13 @@ export async function fetchImoviewProperties(options: {
       }
     }
   } else {
-    // Origem === "imoveis" (Catálogo de Imóveis)
+    // Origem === "imoveis" (Catálogo de Imóveis & Captações)
     const finalidades = options.finalidade && options.finalidade !== "0"
       ? [options.finalidade]
       : ["2", "1"];
 
     for (const fin of finalidades) {
-      for (let page = 1; page <= 5; page++) {
+      for (let page = 1; page <= 12; page++) {
         if (allProperties.length >= maxLimit) break;
 
         try {
@@ -490,6 +515,11 @@ export async function fetchImoviewProperties(options: {
             numeroRegistros: 20, // Imoview hard limit is 20!
             finalidade: fin,
           };
+
+          // Filtro por corretor captador se informado
+          if (options.corretorId) {
+            bodyPayload.codigocaptador = Number(options.corretorId);
+          }
 
           const res = await fetch(`${cleanBase}/Imovel/RetornarImoveis`, {
             method: "POST",
@@ -514,11 +544,32 @@ export async function fetchImoviewProperties(options: {
               ? Math.max(0, Math.floor((now - updateDate.getTime()) / (1000 * 60 * 60 * 24)))
               : 0;
 
+            // Filtros de dias
             if (minDays > 0 && diffDays < minDays) continue;
+            if (maxDays > 0 && diffDays > maxDays) continue;
 
+            // Filtros de data específica
+            if (startDate && updateDate && updateDate < startDate) continue;
+            if (endDate && updateDate && updateDate > endDate) continue;
+
+            // Filtro por tipo de imóvel
             if (options.tipo && item.tipo && !item.tipo.toLowerCase().includes(options.tipo.toLowerCase())) {
               continue;
             }
+
+            // Filtro por bairro
+            if (options.bairro && item.bairro && !item.bairro.toLowerCase().includes(options.bairro.toLowerCase())) {
+              continue;
+            }
+
+            // Filtro por situação do imóvel
+            if (options.situacao && item.situacao && !item.situacao.toLowerCase().includes(options.situacao.toLowerCase())) {
+              continue;
+            }
+
+            const brokerNome = options.corretorId
+              ? brokerMap.get(options.corretorId)
+              : undefined;
 
             if (options.termo) {
               const q = options.termo.toLowerCase();
@@ -526,7 +577,9 @@ export async function fetchImoviewProperties(options: {
                 String(item.codigo).includes(q) ||
                 (item.titulo || "").toLowerCase().includes(q) ||
                 (item.bairro || "").toLowerCase().includes(q) ||
-                (item.cidade || "").toLowerCase().includes(q);
+                (item.cidade || "").toLowerCase().includes(q) ||
+                (item.tipo || "").toLowerCase().includes(q) ||
+                (brokerNome && brokerNome.toLowerCase().includes(q));
               if (!match) continue;
             }
 
@@ -549,6 +602,10 @@ export async function fetchImoviewProperties(options: {
               ""
             ).trim();
 
+            if (options.somenteComTelefone && (!rawPhone || rawPhone.replace(/\D/g, "").length < 8)) {
+              continue;
+            }
+
             const formattedValor = item.valor
               ? (typeof item.valor === "number" ? `R$ ${item.valor.toLocaleString("pt-BR")}` : String(item.valor))
               : "Sob Consulta";
@@ -568,6 +625,9 @@ export async function fetchImoviewProperties(options: {
               proprietarioNome: propNome,
               proprietarioTelefone: rawPhone,
               fotoPrincipal: item.urlfotoprincipal || item.urlfotoprincipalm || undefined,
+              corretorId: options.corretorId || undefined,
+              corretorNome: brokerNome || (item.captadores?.[0]?.nome || undefined),
+              situacao: item.situacao || undefined,
             });
 
             if (allProperties.length >= maxLimit) break;
