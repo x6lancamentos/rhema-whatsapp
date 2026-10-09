@@ -11,7 +11,10 @@ export interface ImoviewLead {
   codigoImovel?: string;
   tipoImovel?: string;
   bairroInteresse?: string;
+  cidadeInteresse?: string;
   valorInteresse?: string;
+  quartos?: string;
+  vagas?: string;
   finalidade?: string;
   funil?: string;
   diasSemContato: number;
@@ -239,6 +242,25 @@ export async function fetchImoviewStalledLeads(options: {
               ? item.interacoes[0].descricao || item.interacoes[0].texto || "Interação registrada"
               : "Sem histórico registrado";
 
+          // Extração inteligente de dados do imóvel de interesse
+          const prop =
+            (Array.isArray(item.imoveisvisita) && item.imoveisvisita[0]) ||
+            (Array.isArray(item.imoveiscarrinho) && item.imoveiscarrinho[0]) ||
+            (Array.isArray(item.imoveisproposta) && item.imoveisproposta[0]) ||
+            (Array.isArray(item.imoveisnegocio) && item.imoveisnegocio[0]) ||
+            item.imovel ||
+            null;
+
+          const codigoImovel = prop?.codigo ? String(prop.codigo) : (item.codigoimovel ? String(item.codigoimovel) : undefined);
+          const tipoImovel = prop?.tipo || prop?.subtipo || prop?.tipoimovel || item.tipoimovel || undefined;
+          const bairroInteresse = prop?.bairro || item.bairro || undefined;
+          const cidadeInteresse = prop?.cidade || item.cidade || undefined;
+          const valorInteresse = prop?.valor
+            ? (typeof prop.valor === "number" ? `R$ ${prop.valor.toLocaleString("pt-BR")}` : String(prop.valor))
+            : (item.valor ? (typeof item.valor === "number" ? `R$ ${item.valor.toLocaleString("pt-BR")}` : String(item.valor)) : undefined);
+          const quartos = prop?.numeroquartos != null ? String(prop.numeroquartos) : (item.numeroquartos != null ? String(item.numeroquartos) : undefined);
+          const vagas = prop?.numerovagas != null ? String(prop.numerovagas) : (item.numerovagas != null ? String(item.numerovagas) : undefined);
+
           allLeads.push({
             atendimentoId: String(item.codigo),
             clienteId: String(item.lead?.codigo || ""),
@@ -246,6 +268,13 @@ export async function fetchImoviewStalledLeads(options: {
             telefone: rawPhone,
             corretorNome: item.corretor || "Rhema Imóveis",
             corretorId: String(item.corretorcodigo || ""),
+            codigoImovel,
+            tipoImovel,
+            bairroInteresse,
+            cidadeInteresse,
+            valorInteresse,
+            quartos,
+            vagas,
             finalidade: item.finalidade || (finalidade === "2" ? "Venda" : "Aluguel"),
             funil: item.funil || "Atendimento",
             diasSemContato: diffDays,

@@ -131,37 +131,39 @@ export function SessionManager({ user }: { user: any }) {
     return (
         <div className="space-y-8">
             {/* Create New Session Card */}
-            <Card className="bg-slate-50 border-dashed border-2">
+            <Card className="bg-muted/30 dark:bg-card/80 border-dashed border-2 border-border/80 shadow-xs">
                 <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                        <Plus className="h-5 w-5" /> Create New Session
+                    <CardTitle className="text-lg flex items-center gap-2 text-foreground font-bold">
+                        <Plus className="h-5 w-5 text-primary" /> Create New Session
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-muted-foreground">
                         Add a new WhatsApp account to manage.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                         <div className="space-y-2">
-                            <Label htmlFor="session-name">Session Name</Label>
+                            <Label htmlFor="session-name" className="text-xs font-semibold text-foreground">Session Name</Label>
                             <Input
                                 id="session-name"
                                 value={newSessionName}
                                 onChange={e => setNewSessionName(e.target.value)}
                                 placeholder="My Business WA"
+                                className="bg-background text-foreground border-border"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="session-id">Custom Session ID (Optional)</Label>
+                            <Label htmlFor="session-id" className="text-xs font-semibold text-foreground">Custom Session ID (Optional)</Label>
                             <Input
                                 id="session-id"
                                 value={newSessionId}
                                 onChange={e => setNewSessionId(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
                                 placeholder="unique-id-123"
+                                className="bg-background text-foreground border-border"
                             />
                             <p className="text-[10px] text-muted-foreground">Only letters, numbers, hyphens.</p>
                         </div>
-                        <Button onClick={createSession} disabled={loading}>
+                        <Button onClick={createSession} disabled={loading} className="w-full">
                             {loading ? 'Creating...' : 'Create Session'}
                         </Button>
                     </div>
@@ -171,13 +173,13 @@ export function SessionManager({ user }: { user: any }) {
             {/* Sessions Table Card */}
             <div>
                 {sessions.length === 0 ? (
-                    <div className="text-center py-10 text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded-lg border border-border/50">
+                    <div className="text-center py-10 text-muted-foreground bg-muted/20 dark:bg-card/40 rounded-lg border border-border/50">
                         No sessions found. Create one above to get started.
                     </div>
                 ) : (
                     <Card className="glass-panel border-border/50 shadow-sm overflow-hidden">
                         <CardHeader className="pb-3 pt-5 px-5">
-                            <CardTitle className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
                                 Active Sessions ({sessions.length})
                             </CardTitle>
                             <CardDescription>
@@ -198,7 +200,7 @@ export function SessionManager({ user }: { user: any }) {
                                     {sessions.map(session => (
                                         <TableRow key={session.id} className="hover:bg-muted/20 dark:hover:bg-muted/5 transition-colors">
                                             <TableCell className="px-5 py-3 font-medium">
-                                                <div className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{session.name}</div>
+                                                <div className="font-semibold text-foreground text-sm">{session.name}</div>
                                                 <div className="text-[11px] text-muted-foreground font-mono mt-0.5">{session.sessionId}</div>
                                             </TableCell>
                                             <TableCell className="py-3">
@@ -206,12 +208,12 @@ export function SessionManager({ user }: { user: any }) {
                                                     variant={session.status === 'CONNECTED' ? 'default' : 'secondary'}
                                                     className={`text-[10px] font-semibold transition-all px-2 py-0.5 shrink-0 inline-flex items-center ${
                                                         session.status === 'CONNECTED' 
-                                                            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 hover:bg-emerald-500/20' 
-                                                            : 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 hover:bg-slate-100'
+                                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20' 
+                                                            : 'bg-muted text-muted-foreground border border-border hover:bg-muted'
                                                     }`}
                                                 >
                                                     <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
-                                                        session.status === 'CONNECTED' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                                                        session.status === 'CONNECTED' ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/60'
                                                     }`} />
                                                     {session.status}
                                                 </Badge>

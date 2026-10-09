@@ -131,7 +131,7 @@ export default function GroupsPage() {
                 {loading ? (
                     <div className="text-center p-8">Loading groups...</div>
                 ) : filteredGroups.length === 0 ? (
-                    <div className="text-center p-8 text-muted-foreground border rounded-lg bg-slate-50">
+                    <div className="text-center p-8 text-muted-foreground border border-border/60 rounded-lg bg-muted/30 dark:bg-card/40">
                         {sessionId ? "No groups found matching criteria." : "No session selected."}
                     </div>
                 ) : (

@@ -17,3 +17,5 @@ Ideias de recursos
 - Quero também que através do Imoview seja possível puxar os dados de proprietário do imóvel para que eu possa entrar em contato com ele por whatsapp para realizar atualização de dados do imóvel em massa se for possível.
 - Outro recurso é que na página de broadcast seja possível escolher qual template será enviado, sendo que o usuário pode criar os próprios templates.
 - Em broadcast também deve ser possível escolher qual sessão será usada para enviar a mensagem. O sistema deve distribuir a carga entre as sessões de forma automática.
+- O sistema deve registrar em banco de dados todos os broadcasts enviados, com data, hora, template, sessão, etc.
+- Além dos dados do cliente, é possível puxar outras informações como o imóvel que o cliente tem interesse, e algumas características para que entre como variáveis no template. E gerar mais conexão?

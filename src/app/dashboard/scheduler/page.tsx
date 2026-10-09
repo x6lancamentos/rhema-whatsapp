@@ -363,7 +363,7 @@ export default function SchedulerPage() {
         sendAtStr: string, setSendAtStr: any,
         sendTimeStr: string, setSendTimeStr: any
     ) => (
-        <div className="space-y-4 border p-4 rounded-md bg-slate-50 mt-4">
+        <div className="space-y-4 border border-border p-4 rounded-md bg-muted/30 dark:bg-card/40 mt-4">
             <Label className="font-semibold text-base">Schedule Type</Label>
             <RadioGroup value={isRec} onValueChange={setRec} className="flex gap-4">
                 <div className="flex items-center space-x-2">
@@ -377,7 +377,7 @@ export default function SchedulerPage() {
             </RadioGroup>
 
             {isRec === "once" && (
-                <div className="space-y-2 mt-4 pt-4 border-t border-slate-200">
+                <div className="space-y-2 mt-4 pt-4 border-t border-border">
                     <Label>Send At (Date & Time)</Label>
                     <Input type="datetime-local" value={sendAtStr} onChange={e => setSendAtStr(e.target.value)} />
                     <p className="text-xs text-muted-foreground">The exact date and time this message will be sent.</p>
@@ -385,7 +385,7 @@ export default function SchedulerPage() {
             )}
 
             {isRec === "recurring" && (
-                <div className="space-y-4 pt-4 mt-2 border-t border-slate-200">
+                <div className="space-y-4 pt-4 mt-2 border-t border-border">
                     <Label className="font-medium">Repeat Interval</Label>
                     <Select value={type} onValueChange={setType}>
                         <SelectTrigger>
@@ -562,7 +562,7 @@ export default function SchedulerPage() {
                         <TabsTrigger value="history">History Logs</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pending" className="mt-0">
-                        {loading ? <div className="text-center p-8">Loading...</div> : filteredMessages.length === 0 ? <div className="text-center p-8 text-muted-foreground border rounded bg-slate-50">No pending messages.</div> : (
+                        {loading ? <div className="text-center p-8">Loading...</div> : filteredMessages.length === 0 ? <div className="text-center p-8 text-muted-foreground border border-border rounded-lg bg-muted/30 dark:bg-card/40">No pending messages.</div> : (
                             <div className="grid gap-4">
                                 {filteredMessages.map(msg => (
                                     <Card key={msg.id}>
@@ -570,17 +570,17 @@ export default function SchedulerPage() {
                                             <div>
                                                 <div className="font-bold flex items-center gap-2">
                                                     {msg.jid.split('@')[0]}
-                                                    {msg.jid.includes("@g.us") ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-purple-100 text-purple-800">Group</span> : null}
-                                                    {msg.jid.includes("@newsletter") ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-orange-100 text-orange-800">Channel</span> : null}
-                                                    <span className="text-xs px-2 py-0.5 rounded font-normal bg-yellow-100 text-yellow-800">{msg.status}</span>
-                                                    {msg.cronExpression && <span className="text-xs px-2 py-0.5 rounded font-normal bg-blue-100 text-blue-800">Recurring</span>}
+                                                    {msg.jid.includes("@g.us") ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300">Group</span> : null}
+                                                    {msg.jid.includes("@newsletter") ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300">Channel</span> : null}
+                                                    <span className="text-xs px-2 py-0.5 rounded font-normal bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300">{msg.status}</span>
+                                                    {msg.cronExpression && <span className="text-xs px-2 py-0.5 rounded font-normal bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300">Recurring</span>}
                                                 </div>
                                                 <div className="text-sm font-medium mt-1">{msg.content || "[Media Only]"}</div>
                                                 <div className="text-xs text-muted-foreground mt-1">Next Run: {moment(msg.sendAt).tz(systemTimezone).format('YYYY-MM-DD HH:mm:ss')}</div>
                                             </div>
                                             <div className="flex gap-2">
                                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(msg)}>Edit</Button>
-                                                <Button variant="ghost" size="icon" onClick={() => setDeleteId(msg.id)} className="text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                                                <Button variant="ghost" size="icon" onClick={() => setDeleteId(msg.id)} className="text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></Button>
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -589,7 +589,7 @@ export default function SchedulerPage() {
                         )}
                     </TabsContent>
                     <TabsContent value="history" className="mt-0">
-                        {loading ? <div className="text-center p-8">Loading...</div> : filteredMessages.length === 0 ? <div className="text-center p-8 text-muted-foreground border rounded bg-slate-50">No history found.</div> : (
+                        {loading ? <div className="text-center p-8">Loading...</div> : filteredMessages.length === 0 ? <div className="text-center p-8 text-muted-foreground border border-border rounded-lg bg-muted/30 dark:bg-card/40">No history found.</div> : (
                             <div className="grid gap-4">
                                 {filteredMessages.map(msg => (
                                     <Card key={msg.id} className="opacity-80">
@@ -597,15 +597,15 @@ export default function SchedulerPage() {
                                             <div>
                                                 <div className="font-bold flex items-center gap-2">
                                                     {msg.jid.split('@')[0]}
-                                                    {msg.jid.includes("@g.us") ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-purple-100 text-purple-800">Group</span> : null}
-                                                    {msg.jid.includes("@newsletter") ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-orange-100 text-orange-800">Channel</span> : null}
-                                                    {msg.status === 'SENT' ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-green-100 text-green-800 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Sent</span> : <span className="text-xs px-2 py-0.5 rounded font-normal bg-red-100 text-red-800 flex items-center gap-1"><XCircle className="w-3 h-3"/> Failed</span>}
+                                                    {msg.jid.includes("@g.us") ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300">Group</span> : null}
+                                                    {msg.jid.includes("@newsletter") ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300">Channel</span> : null}
+                                                    {msg.status === 'SENT' ? <span className="text-xs px-2 py-0.5 rounded font-normal bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Sent</span> : <span className="text-xs px-2 py-0.5 rounded font-normal bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300 flex items-center gap-1"><XCircle className="w-3 h-3"/> Failed</span>}
                                                 </div>
                                                 <div className="text-sm font-medium mt-1">{msg.content || "[Media Only]"}</div>
                                                 <div className="text-xs text-muted-foreground mt-1">Processed: {moment(msg.sendAt).tz(systemTimezone).format('YYYY-MM-DD HH:mm:ss')}</div>
                                             </div>
                                             <div className="flex gap-2">
-                                                <Button variant="ghost" size="icon" onClick={() => setDeleteId(msg.id)} className="text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                                                <Button variant="ghost" size="icon" onClick={() => setDeleteId(msg.id)} className="text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></Button>
                                             </div>
                                         </CardContent>
                                     </Card>

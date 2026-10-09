@@ -42,7 +42,10 @@ interface ImoviewLead {
   codigoImovel?: string;
   tipoImovel?: string;
   bairroInteresse?: string;
+  cidadeInteresse?: string;
   valorInteresse?: string;
+  quartos?: string;
+  vagas?: string;
   diasSemContato: number;
   ultimoHistorico?: string;
   dataUltimoContato?: string;
@@ -244,7 +247,10 @@ export default function ImoviewIntegrationPage() {
           codigo_imovel: l.codigoImovel || "",
           tipo_imovel: l.tipoImovel || "imóvel",
           bairro: l.bairroInteresse || "",
+          cidade: l.cidadeInteresse || "",
           valor: l.valorInteresse || "",
+          quartos: l.quartos || "",
+          vagas: l.vagas || "",
           atendimentoId: l.atendimentoId,
           codigo_atendimento: l.atendimentoId,
         },

@@ -182,31 +182,31 @@ export function Navbar({ appName }: NavbarProps) {
                         <div className="max-h-[300px] overflow-y-auto">
                             {notifications.length === 0 ? (
                                 <div className="min-h-[150px] flex flex-col items-center justify-center text-center p-4">
-                                    <div className="bg-slate-100 p-3 rounded-full mb-3">
-                                        <Inbox className="h-6 w-6 text-slate-400" />
+                                    <div className="bg-muted dark:bg-card p-3 rounded-full mb-3 border border-border/50">
+                                        <Inbox className="h-6 w-6 text-muted-foreground" />
                                     </div>
                                     <p className="text-sm font-medium">No new notifications</p>
                                     <p className="text-xs text-muted-foreground max-w-[180px]">We'll notify you when something important arrives.</p>
                                 </div>
                             ) : (
-                                <div className="divide-y">
+                                <div className="divide-y divide-border">
                                     {notifications.map(n => (
                                         <div
                                             key={n.id}
-                                            className={`p-4 hover:bg-slate-50 transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
+                                            className={`p-4 hover:bg-muted/50 dark:hover:bg-muted/30 transition-colors ${!n.read ? 'bg-primary/10' : ''}`}
                                         >
                                             <div className="flex justify-between items-start gap-3">
                                                 <div
                                                     className="flex-1 space-y-1 cursor-pointer"
                                                     onClick={() => handleNotificationClick(n)}
                                                 >
-                                                    <p className={`text-sm font-medium leading-none ${!n.read ? 'text-blue-700' : 'text-slate-900'}`}>
+                                                    <p className={`text-sm font-medium leading-none ${!n.read ? 'text-primary font-semibold' : 'text-foreground'}`}>
                                                         {n.title}
                                                     </p>
                                                     <p className="text-xs text-muted-foreground whitespace-normal break-words">
                                                         {n.message}
                                                     </p>
-                                                    <p className="text-[10px] text-slate-400">
+                                                    <p className="text-[10px] text-muted-foreground">
                                                         {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
                                                     </p>
                                                 </div>

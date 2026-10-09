@@ -164,14 +164,14 @@ export function MobileNav({ appName = "WA-AKG" }: { appName?: string }) {
                     })}
                 </nav>
 
-                <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+                <div className="p-4 border-t border-border bg-muted/30 dark:bg-card/40">
                     <div className="flex items-center gap-3 mb-3">
-                        <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-600">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-semibold text-primary">
                             {session?.user?.name?.charAt(0)?.toUpperCase() || "U"}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-700 truncate">{session?.user?.name || "User"}</p>
-                            <p className="text-[11px] text-slate-400 truncate">{session?.user?.email}</p>
+                            <p className="text-sm font-medium text-foreground truncate">{session?.user?.name || "User"}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{session?.user?.email}</p>
                         </div>
                     </div>
                     <Button

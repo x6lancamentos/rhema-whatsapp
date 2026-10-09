@@ -247,9 +247,9 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                         background: rgba(148, 163, 184, 0.5);
                     }
                 ` }} />
-                <DialogHeader className="p-4 sm:p-5 border-b shrink-0 flex flex-row items-center justify-between bg-slate-50/20">
+                <DialogHeader className="p-4 sm:p-5 border-b shrink-0 flex flex-row items-center justify-between bg-muted/20">
                     <div className="space-y-1">
-                        <DialogTitle className="flex items-center gap-2.5 text-lg font-bold text-slate-800">
+                        <DialogTitle className="flex items-center gap-2.5 text-lg font-bold text-foreground">
                             <div className="bg-primary/10 p-1.5 rounded-lg text-primary">
                                 <History className="h-4 w-4" />
                             </div>
@@ -268,11 +268,11 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                     </div>
                 ) : logs.length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-sm text-muted-foreground space-y-3 p-6 text-center">
-                        <div className="h-12 w-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 shadow-sm">
+                        <div className="h-12 w-12 rounded-full bg-muted border border-border flex items-center justify-center text-muted-foreground shadow-xs">
                             <History className="h-5 w-5 opacity-60" />
                         </div>
                         <div className="space-y-1">
-                            <p className="font-semibold text-slate-800 text-sm">No delivery logs yet</p>
+                            <p className="font-semibold text-foreground text-sm">No delivery logs yet</p>
                             <p className="text-xs text-muted-foreground max-w-[280px]">
                                 Logs will appear here as soon as webhooks are dispatched or when you click "Test".
                             </p>
@@ -282,16 +282,16 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                     <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
                         {/* Left Column: Logs List */}
                         <div className={cn(
-                            "w-full md:w-[280px] lg:w-[320px] xl:w-[340px] border-r border-slate-100 flex flex-col min-h-0 bg-slate-50/20 shrink-0",
+                            "w-full md:w-[280px] lg:w-[320px] xl:w-[340px] border-r border-border flex flex-col min-h-0 bg-muted/10 shrink-0",
                             showMobileDetails ? "hidden md:flex" : "flex"
                         )}>
                             {/* Logs List Subheader */}
-                            <div className="p-3 px-4 border-b flex items-center justify-between text-xs text-muted-foreground shrink-0 bg-slate-100/30">
+                            <div className="p-3 px-4 border-b flex items-center justify-between text-xs text-muted-foreground shrink-0 bg-muted/30">
                                 <span className="flex items-center gap-2">
-                                    <span className="bg-slate-200/80 text-slate-700 px-2 py-0.5 rounded-full font-semibold text-[10px]">
+                                    <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-semibold text-[10px] border border-border">
                                         {total} logs
                                     </span>
-                                    <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold text-[10px] border border-emerald-100/40">
+                                    <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold text-[10px] border border-emerald-500/20">
                                         <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse inline-block" />
                                         Live
                                     </span>
@@ -301,7 +301,7 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-6 w-6 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                                        className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted"
                                         onClick={fetchLogs}
                                         title="Refresh logs"
                                     >
@@ -311,7 +311,7 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                             </div>
 
                             {/* Scroll Container */}
-                            <div className="flex-1 overflow-y-auto min-h-0 py-2 bg-slate-50/10 custom-scrollbar-light">
+                            <div className="flex-1 overflow-y-auto min-h-0 py-2">
                                 {logs.map((log) => {
                                     const isSelected = log.id === selectedLogId;
                                     const isSuccess = log.status === "SUCCESS";
@@ -327,12 +327,12 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                                             className={cn(
                                                 "w-[calc(100%-16px)] mx-2 my-0.5 text-left p-3 rounded-lg transition-all flex flex-col gap-1.5 border border-transparent select-none",
                                                 isSelected 
-                                                    ? "bg-white shadow-sm border-slate-200/80 text-slate-950 font-medium" 
-                                                    : "hover:bg-slate-100/50 text-slate-700"
+                                                    ? "bg-background shadow-xs border-border text-foreground font-medium" 
+                                                    : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
                                             )}
                                         >
                                             <div className="flex items-center justify-between gap-2 w-full">
-                                                <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100/80 border text-slate-700 truncate max-w-[120px] lg:max-w-[160px]">
+                                                <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted/80 border border-border text-foreground truncate max-w-[120px] lg:max-w-[160px]">
                                                     {log.event}
                                                 </span>
                                                 <span className="text-[10px] text-slate-400 font-mono">
@@ -418,7 +418,7 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="md:hidden -ml-2 h-7 px-2 text-xs flex items-center gap-1 text-slate-600 hover:text-slate-900"
+                                                className="md:hidden -ml-2 h-7 px-2 text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground"
                                                 onClick={() => setShowMobileDetails(false)}
                                             >
                                                 <ArrowLeft className="h-4 w-4" />
@@ -426,7 +426,7 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                                             </Button>
 
                                             <div className="flex flex-wrap items-center gap-2 text-xs">
-                                                <span className="font-semibold font-mono bg-slate-100 border px-2 py-0.5 rounded text-slate-700 shadow-sm">
+                                                <span className="font-semibold font-mono bg-muted border border-border px-2 py-0.5 rounded text-foreground shadow-xs">
                                                     {selectedLog.event}
                                                 </span>
 
@@ -442,60 +442,60 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
 
                                                 {selectedLog.responseStatusCode != null && (
                                                     <span className={cn(
-                                                        "font-bold font-mono text-xs bg-slate-50 px-1.5 py-0.5 rounded border shadow-inner",
-                                                        selectedLog.responseStatusCode >= 400 ? "text-rose-600 border-rose-100/50" : "text-emerald-600 border-emerald-100/50"
+                                                        "font-bold font-mono text-xs bg-muted px-1.5 py-0.5 rounded border shadow-inner",
+                                                        selectedLog.responseStatusCode >= 400 ? "text-rose-600 border-rose-500/20" : "text-emerald-600 border-emerald-500/20"
                                                     )}>
                                                         {selectedLog.responseStatusCode}
                                                     </span>
                                                 )}
 
                                                 {selectedLog.responseTimeMs != null && (
-                                                    <span className="text-slate-500 text-xs font-mono">
+                                                    <span className="text-muted-foreground text-xs font-mono">
                                                         ({selectedLog.responseTimeMs}ms latency)
                                                     </span>
                                                 )}
                                             </div>
                                         </div>
 
-                                        {/* Row 2: URL bar (Full width, wraps long URLs cleanly but capped to max height with internal scrollbar) */}
-                                        <div className="flex items-start gap-2.5 bg-slate-50 border border-slate-200/80 py-1.5 px-3 rounded-lg w-full shadow-inner">
-                                            <span className="text-[9px] font-bold text-slate-500 select-none bg-slate-200/60 px-1.5 py-0.5 rounded mt-0.5 shrink-0">
+                                        {/* Row 2: URL bar */}
+                                        <div className="flex items-start gap-2.5 bg-muted/40 border border-border py-1.5 px-3 rounded-lg w-full shadow-inner">
+                                            <span className="text-[9px] font-bold text-muted-foreground select-none bg-muted px-1.5 py-0.5 rounded mt-0.5 shrink-0">
                                                 POST
                                             </span>
-                                            <div className="text-[11px] font-mono text-slate-600 break-all select-all flex-1 leading-relaxed max-h-[50px] overflow-y-auto custom-scrollbar-light pr-1">
+                                            <div className="text-[11px] font-mono text-foreground break-all select-all flex-1 leading-relaxed max-h-[50px] overflow-y-auto pr-1">
                                                 {selectedLog.requestUrl}
                                             </div>
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-5 w-5 text-slate-400 hover:text-slate-800 shrink-0 mt-0.5"
+                                                className="h-5 w-5 text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
                                                 onClick={() => copyToClipboard(selectedLog.requestUrl, "URL copied to clipboard")}
                                             >
                                                 <Copy className="h-3 w-3" />
                                             </Button>
                                         </div>
 
-                                        {/* Row 3: Attempted timestamp and Log ID (Self-wrapping secondary text) */}
-                                        <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono">
+                                        {/* Row 3: Attempted timestamp and Log ID */}
+                                        <div className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono">
                                             <div className="flex items-center gap-1.5">
-                                                <Info className="h-3.5 w-3.5 text-slate-400/80" />
+                                                <Info className="h-3.5 w-3.5 text-muted-foreground/80" />
                                                 <span>Attempted:</span>
-                                                <span className="font-semibold text-slate-600">{formatTime(selectedLog.createdAt, timezone)}</span>
+                                                <span className="font-semibold text-foreground">{formatTime(selectedLog.createdAt, timezone)}</span>
                                             </div>
-                                            <span className="text-slate-300 hidden sm:inline select-none">•</span>
+                                            <span className="text-muted-foreground/40 hidden sm:inline select-none">•</span>
                                             <div className="flex items-center gap-1">
                                                 <span>ID:</span>
-                                                <span className="font-semibold text-slate-600 select-all">{selectedLog.id}</span>
+                                                <span className="font-semibold text-foreground select-all">{selectedLog.id}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Error Message banner */}
                                     {selectedLog.errorMessage && (
-                                        <div className="mx-5 mt-3 p-3.5 bg-rose-50/50 border border-rose-100 text-rose-800 text-xs rounded-xl flex items-start gap-2.5">
-                                            <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                                        <div className="mx-5 mt-3 p-3.5 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl flex items-start gap-2.5">
+                                            <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                                             <div className="space-y-1">
-                                                <p className="font-semibold text-rose-900 text-xs">Delivery Failure</p>
+                                                <p className="font-semibold text-destructive text-xs">Delivery Failure</p>
                                                 <p className="font-mono break-all text-[11px] leading-relaxed">{selectedLog.errorMessage}</p>
                                             </div>
                                         </div>
@@ -503,15 +503,15 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
 
                                     {/* Tabs (Segmented Control style) */}
                                     <div className="flex-1 flex flex-col min-h-0">
-                                        <div className="flex border-b shrink-0 px-5 py-2.5 bg-slate-50/20 items-center justify-between">
-                                            <div className="bg-slate-100 p-0.5 rounded-lg flex gap-0.5 text-xs">
+                                        <div className="flex border-b border-border shrink-0 px-5 py-2.5 bg-muted/20 items-center justify-between">
+                                            <div className="bg-muted p-0.5 rounded-lg flex gap-0.5 text-xs">
                                                 <button
                                                     onClick={() => setActiveTab("payload")}
                                                     className={cn(
                                                         "px-3.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-medium",
                                                         activeTab === "payload"
-                                                            ? "bg-white shadow-sm text-slate-900 font-semibold"
-                                                            : "text-slate-500 hover:text-slate-900"
+                                                            ? "bg-background shadow-xs text-foreground font-semibold"
+                                                            : "text-muted-foreground hover:text-foreground"
                                                     )}
                                                 >
                                                     <FileJson className="h-3.5 w-3.5" />
@@ -522,8 +522,8 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                                                     className={cn(
                                                         "px-3.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-medium",
                                                         activeTab === "response"
-                                                            ? "bg-white shadow-sm text-slate-900 font-semibold"
-                                                            : "text-slate-500 hover:text-slate-900"
+                                                            ? "bg-background shadow-xs text-foreground font-semibold"
+                                                            : "text-muted-foreground hover:text-foreground"
                                                     )}
                                                 >
                                                     <ArrowRight className="h-3.5 w-3.5" />
@@ -534,8 +534,8 @@ export default function WebhookLogDialog({ webhookId, webhookName, targetSession
                                                     className={cn(
                                                         "px-3.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-medium",
                                                         activeTab === "headers"
-                                                            ? "bg-white shadow-sm text-slate-900 font-semibold"
-                                                            : "text-slate-500 hover:text-slate-900"
+                                                            ? "bg-background shadow-xs text-foreground font-semibold"
+                                                            : "text-muted-foreground hover:text-foreground"
                                                     )}
                                                 >
                                                     <ShieldCheck className="h-3.5 w-3.5" />

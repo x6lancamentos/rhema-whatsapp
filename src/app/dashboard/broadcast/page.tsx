@@ -366,8 +366,20 @@ export default function BroadcastPage() {
             setRecipientSource("manual");
             // Sincroniza também a caixa de texto manual com os telefones
             const textLines = parsed.map((p: any) => p.originalPhone || p.phone).filter(Boolean).join("\n");
-            setManualText(textLines);
-            setDetectedColumns(["nome", "primeiro_nome", "corretor", "codigo_imovel", "bairro"]);
+            setDetectedColumns([
+              "nome",
+              "primeiro_nome",
+              "telefone",
+              "corretor",
+              "codigo_imovel",
+              "tipo_imovel",
+              "bairro",
+              "cidade",
+              "valor",
+              "quartos",
+              "vagas",
+              "codigo_atendimento"
+            ]);
             setFileStats({
               name: `Imoview CRM (${parsed.length} leads parados)`,
               total: parsed.length,

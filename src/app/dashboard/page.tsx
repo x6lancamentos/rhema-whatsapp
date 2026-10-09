@@ -163,13 +163,13 @@ export default async function DashboardPage() {
                 </div>
 
                 {sessions.length === 0 ? (
-                    <Card className="border-dashed border-2 border-slate-200 shadow-none">
+                    <Card className="border-dashed border-2 border-border/80 shadow-none bg-muted/20 dark:bg-card/40">
                         <CardContent className="py-12 text-center">
-                            <div className="bg-slate-100 h-12 w-12 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <QrCode className="h-6 w-6 text-slate-400" />
+                            <div className="bg-muted dark:bg-card h-12 w-12 rounded-full flex items-center justify-center mx-auto mb-3 border border-border/60">
+                                <QrCode className="h-6 w-6 text-muted-foreground" />
                             </div>
-                            <p className="text-sm font-medium text-slate-600 mb-1">No sessions yet</p>
-                            <p className="text-xs text-slate-400 mb-4">Connect your first WhatsApp device to get started</p>
+                            <p className="text-sm font-medium text-foreground mb-1">No sessions yet</p>
+                            <p className="text-xs text-muted-foreground mb-4">Connect your first WhatsApp device to get started</p>
                             <Link href="/dashboard/sessions">
                                 <Button size="sm" variant="outline" className="gap-2">
                                     <Plus className="h-4 w-4" /> Create Session

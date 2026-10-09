@@ -131,7 +131,7 @@ export default function NotificationAdminPage() {
                 </Card>
 
                 <div className="space-y-6">
-                    <Card className="bg-slate-50 border-dashed">
+                    <Card className="bg-muted/30 dark:bg-card/40 border-dashed border-border/60">
                         <CardHeader>
                             <CardTitle className="text-base text-muted-foreground">Preview</CardTitle>
                         </CardHeader>

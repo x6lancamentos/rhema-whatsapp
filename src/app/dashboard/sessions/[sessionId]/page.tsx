@@ -249,23 +249,23 @@ export default function SessionDetailPage() {
                             <div className="mt-4 pt-4 border-t">
                                 <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Activity className="h-4 w-4" /> System Health</h4>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                    <div className="bg-slate-50 p-3 rounded border text-center relative overflow-hidden">
-                                        <Wifi className="h-4 w-4 text-slate-400 absolute top-2 right-2" />
-                                        <div className="text-xs text-slate-500">Ping state</div>
-                                        <div className="font-bold text-green-600 mt-1">{systemMetrics.ping}</div>
+                                    <div className="bg-muted/40 dark:bg-card/60 p-3 rounded-lg border border-border/60 text-center relative overflow-hidden">
+                                        <Wifi className="h-4 w-4 text-primary absolute top-2 right-2" />
+                                        <div className="text-xs text-muted-foreground">Ping state</div>
+                                        <div className="font-bold text-emerald-500 mt-1">{systemMetrics.ping}</div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded border text-center">
-                                        <div className="text-xs text-slate-500">Store Contacts</div>
-                                        <div className="font-bold text-slate-700 mt-1">{systemMetrics.store?.contacts || 0}</div>
+                                    <div className="bg-muted/40 dark:bg-card/60 p-3 rounded-lg border border-border/60 text-center">
+                                        <div className="text-xs text-muted-foreground">Store Contacts</div>
+                                        <div className="font-bold text-foreground mt-1">{systemMetrics.store?.contacts || 0}</div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded border text-center">
-                                        <div className="text-xs text-slate-500">Store Chats</div>
-                                        <div className="font-bold text-slate-700 mt-1">{systemMetrics.store?.chats || 0}</div>
+                                    <div className="bg-muted/40 dark:bg-card/60 p-3 rounded-lg border border-border/60 text-center">
+                                        <div className="text-xs text-muted-foreground">Store Chats</div>
+                                        <div className="font-bold text-foreground mt-1">{systemMetrics.store?.chats || 0}</div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded border text-center relative">
-                                        <MemoryStick className="h-4 w-4 text-slate-400 absolute top-2 right-2 opacity-50" />
-                                        <div className="text-xs text-slate-500">Store Msgs</div>
-                                        <div className="font-bold text-slate-700 mt-1">{systemMetrics.store?.messages || 0}</div>
+                                    <div className="bg-muted/40 dark:bg-card/60 p-3 rounded-lg border border-border/60 text-center relative">
+                                        <MemoryStick className="h-4 w-4 text-muted-foreground absolute top-2 right-2 opacity-50" />
+                                        <div className="text-xs text-muted-foreground">Store Msgs</div>
+                                        <div className="font-bold text-foreground mt-1">{systemMetrics.store?.messages || 0}</div>
                                     </div>
                                 </div>
                             </div>

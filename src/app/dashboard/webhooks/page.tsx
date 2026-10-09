@@ -359,7 +359,7 @@ export default function WebhooksPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-                        <div className="flex-1 bg-slate-100 rounded-md p-2 sm:p-3 font-mono text-xs sm:text-sm overflow-x-auto">
+                        <div className="flex-1 bg-muted/60 dark:bg-card/80 border border-border text-foreground rounded-md p-2 sm:p-3 font-mono text-xs sm:text-sm overflow-x-auto">
                             {apiKey ? (
                                 showApiKey ? apiKey : "••••••••••••••••••••••••••••••••"
                             ) : (
@@ -386,7 +386,7 @@ export default function WebhooksPage() {
                     </div>
                     {apiKey && (
                         <p className="text-xs text-muted-foreground mt-2">
-                            Example: <code className="bg-slate-100 px-1 py-0.5 rounded">curl -H "X-API-Key: {apiKey?.slice(0, 10)}..." http://your-server/api/sessions</code>
+                            Example: <code className="bg-muted dark:bg-card border border-border px-1 py-0.5 rounded text-foreground">curl -H "X-API-Key: {apiKey?.slice(0, 10)}..." http://your-server/api/sessions</code>
                         </p>
                     )}
                 </CardContent>
