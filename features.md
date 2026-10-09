@@ -5,6 +5,7 @@ Documento oficial de consolidação e priorização de ideias, melhorias e novas
 ---
 
 ## 🧭 Visão Geral do Sistema
+
 O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendimento via WhatsApp integrada ao CRM Imoview, desenvolvida sob medida para a operação de vendas e captação imobiliária da Rhema Imóveis.
 
 ---
@@ -27,9 +28,9 @@ O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendim
 
 - [x] **Resgate de Leads Parados**: Filtro por dias sem interação, corretor e situação; puxa atendimentos ativos diretamente da API do Imoview.
 - [x] **Variáveis do Imóvel no Lead**: Extração inteligente de dados do imóvel associado (`{{codigo_imovel}}`, `{{tipo_imovel}}`, `{{bairro}}`, `{{cidade}}`, `{{valor}}`, `{{quartos}}`, `{{vagas}}`).
-- [ ] **Módulo de Contato com Proprietários (Captação & Atualização)**:
-  - Puxar via Imoview a lista de proprietários de imóveis ativos.
-  - Filtro para imóveis sem atualização há mais de 60 ou 90 dias.
+- [x] **Módulo de Contato com Proprietários (Captação & Atualização)**:
+  - Puxar via Imoview a lista de proprietários de imóveis ativos (`/dashboard/imoview`).
+  - Filtro para imóveis sem atualização há mais de 30, 60 ou 90 dias.
   - Disparo em massa para confirmação de disponibilidade, preço e dados do imóvel.
   - Template de "Imóvel Vendido" para proprietários (notificação de fechamento e solicitação de novas captações).
 - [ ] **Automação de Status no Imoview**:
@@ -90,13 +91,15 @@ O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendim
 ## 5. 📝 Modelos de Mensagens (Templates) & Cadências
 
 - [x] **Seleção Dinâmica de Templates no Broadcast**: Selecionar modelos salvos e visualizar prévia com substituição de variáveis em tempo real.
-- [ ] **Biblioteca de Templates por Etapa do Funil**:
+- [x] **Biblioteca de Templates por Etapa do Funil**:
+  - Biblioteca completa calibrada para a Rhema Imóveis em `/dashboard/templates`.
   - **Prospecção**: Apresentação de imóveis com dados dinâmicos (`{{tipo_imovel}}`, `{{bairro}}`, `{{valor}}`).
   - **Recuperação**: Follow-up de leads parados com perguntas objetivas.
   - **Boas-Vindas**: Recepção imediata de novos leads gerados em portais ou site.
   - **Agendamento**: Convite para visita presencial ao imóvel.
   - **Lembrete de Visita**: Disparo D-1 e H-2 para evitar faltas em visitas.
-  - **Pós-Venda**: Acompanhamento após fechamento de negócio.
+  - **Proprietários**: Confirmação de disponibilidade, atualização de valor e notificação de imóvel vendido.
+  - **Pós-Venda**: Acompanhamento após fechamento de negócio e pedido de indicação.
 - [ ] **Régua de Relacionamento Automatizada (Cadências / Drip)**:
   - Envio sequencial pré-programado (ex: D+0, D+2, D+5, D+10).
   - Interrupção automática da cadência assim que o lead responder.

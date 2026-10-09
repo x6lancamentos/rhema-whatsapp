@@ -65,7 +65,8 @@ const navGroups: NavGroup[] = [
         items: [
             { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
             { href: "/dashboard/broadcast", label: "Broadcast", icon: Megaphone },
-            { href: "/dashboard/imoview", label: "Imoview Resgate", icon: Building2 },
+            { href: "/dashboard/templates", label: "Modelos", icon: FileText },
+            { href: "/dashboard/imoview", label: "Imoview CRM", icon: Building2 },
             { href: "/dashboard/sticker", label: "Sticker Maker", icon: ImageIcon },
         ],
     },

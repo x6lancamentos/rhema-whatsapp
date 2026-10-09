@@ -11,7 +11,9 @@ const createTemplateSchema = z.object({
   mediaType: z.string().optional().nullable(),
 });
 
-// GET: List all templates for the current user
+import { REAL_ESTATE_DEFAULT_TEMPLATES } from "@/lib/default-templates";
+
+// GET: List all templates for the current user (auto-seeds defaults if empty)
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthenticatedUser(request);
@@ -19,10 +21,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ status: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    const templates = await prisma.messageTemplate.findMany({
+    let templates = await prisma.messageTemplate.findMany({
       where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
     });
+
+    // Auto-seed default real estate templates on first access
+    if (templates.length === 0) {
+      for (const tpl of REAL_ESTATE_DEFAULT_TEMPLATES) {
+        await prisma.messageTemplate.create({
+          data: {
+            userId: user.id,
+            name: tpl.name,
+            category: tpl.category,
+            content: tpl.content,
+          },
+        });
+      }
+
+      templates = await prisma.messageTemplate.findMany({
+        where: { userId: user.id },
+        orderBy: { updatedAt: "desc" },
+      });
+    }
 
     return NextResponse.json({
       status: true,

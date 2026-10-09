@@ -352,11 +352,14 @@ export default function BroadcastPage() {
     fetchSavedLists();
   }, [fetchTemplates, fetchSavedLists]);
 
-  // Auto-load Imoview Resgate Leads if coming from Imoview screen
+  // Auto-load Imoview Resgate Leads or Proprietários if coming from Imoview screen
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("source") === "imoview") {
+    const source = params.get("source");
+    const templateParam = params.get("template") || params.get("templateId");
+
+    if (source === "imoview") {
       try {
         const stored = localStorage.getItem("imoview_resgate_leads");
         if (stored) {
@@ -364,8 +367,6 @@ export default function BroadcastPage() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             setContactsList(parsed);
             setRecipientSource("manual");
-            // Sincroniza também a caixa de texto manual com os telefones
-            const textLines = parsed.map((p: any) => p.originalPhone || p.phone).filter(Boolean).join("\n");
             setDetectedColumns([
               "nome",
               "primeiro_nome",
@@ -398,6 +399,69 @@ export default function BroadcastPage() {
       } catch (err) {
         console.error("Error loading imoview leads", err);
       }
+    } else if (source === "proprietarios") {
+      try {
+        const stored = localStorage.getItem("imoview_proprietarios_leads");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setContactsList(parsed);
+            setRecipientSource("manual");
+            setDetectedColumns([
+              "nome_proprietario",
+              "primeiro_nome",
+              "telefone",
+              "codigo_imovel",
+              "tipo_imovel",
+              "titulo_imovel",
+              "finalidade",
+              "valor",
+              "bairro",
+              "cidade",
+              "quartos",
+              "vagas",
+              "dias_sem_atualizacao",
+              "data_ultima_alteracao"
+            ]);
+            setFileStats({
+              name: `Imoview CRM (${parsed.length} proprietários)`,
+              total: parsed.length,
+              valid: parsed.length,
+              duplicates: 0,
+            });
+
+            const ownerSuggestedMsg = "{Olá|Oi} {{primeiro_nome}}, tudo bem? Sou da Rhema Imóveis.\n\nEstamos atualizando a nossa carteira de imóveis para clientes compradores e investidores ativos.\n\nGostaria de confirmar se o seu imóvel (Cód. {{codigo_imovel}} - {{tipo_imovel}} no {{bairro}}) ainda está disponível para {{finalidade}} e se o valor continua {{valor}}?\n\nPodemos confirmar os detalhes?";
+            setMessage(ownerSuggestedMsg);
+            updatePreview(ownerSuggestedMsg, parsed);
+
+            toast.success(`⚡ ${parsed.length} proprietários do Imoview carregados com sucesso!`);
+            localStorage.removeItem("imoview_proprietarios_leads");
+          }
+        }
+      } catch (err) {
+        console.error("Error loading imoview proprietarios", err);
+      }
+    }
+
+    // Auto-select template if specified in query params
+    if (templateParam) {
+      fetch("/api/templates")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.data && Array.isArray(data.data)) {
+            const found = data.data.find(
+              (t: any) =>
+                t.id === templateParam ||
+                t.name.toLowerCase().includes(templateParam.toLowerCase()) ||
+                (t.category && t.category.toLowerCase().includes(templateParam.toLowerCase()))
+            );
+            if (found) {
+              setMessage(found.content);
+              toast.info(`Modelo "${found.name}" aplicado automaticamente!`);
+            }
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
