@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const tipo = searchParams.get("tipo") || undefined;
     const termo = searchParams.get("termo") || undefined;
     const limite = parseInt(searchParams.get("limite") || "100", 10);
+    const origem = (searchParams.get("origem") as "proprietarios" | "imoveis") || "proprietarios";
 
     const config = await getImoviewConfig();
     if (!config.apiKey) {
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
       tipo,
       termo,
       limite,
+      origem,
     });
 
     return NextResponse.json({

@@ -123,6 +123,7 @@ export default function ImoviewIntegrationPage() {
   const [properties, setProperties] = useState<ImoviewProperty[]>([]);
   const [selectedPropertyCodes, setSelectedPropertyCodes] = useState<string[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
+  const [origemFiltro, setOrigemFiltro] = useState<"proprietarios" | "imoveis">("proprietarios");
   const [diasFiltroProps, setDiasFiltroProps] = useState(0); // 0 = todos, 30, 60, 90
   const [finalidadeFiltro, setFinalidadeFiltro] = useState("0"); // 0 = todos, 2 = Venda, 1 = Locacao
   const [tipoFiltro, setTipoFiltro] = useState("");
@@ -243,6 +244,7 @@ export default function ImoviewIntegrationPage() {
     setPropertiesLoading(true);
     try {
       const params = new URLSearchParams();
+      params.set("origem", origemFiltro);
       if (diasFiltroProps > 0) params.set("dias", String(diasFiltroProps));
       if (finalidadeFiltro && finalidadeFiltro !== "0") params.set("finalidade", finalidadeFiltro);
       if (tipoFiltro) params.set("tipo", tipoFiltro);
@@ -266,11 +268,11 @@ export default function ImoviewIntegrationPage() {
         }
       }
     } catch {
-      toast.error("Erro ao carregar imóveis e proprietários do Imoview");
+      toast.error("Erro ao carregar proprietários do Imoview");
     } finally {
       setPropertiesLoading(false);
     }
-  }, [diasFiltroProps, finalidadeFiltro, tipoFiltro, searchPropTerm]);
+  }, [origemFiltro, diasFiltroProps, finalidadeFiltro, tipoFiltro, searchPropTerm]);
 
   useEffect(() => {
     fetchConfig();
@@ -282,11 +284,11 @@ export default function ImoviewIntegrationPage() {
     if (connectionStatus === "connected") {
       if (activeTab === "resgate" && leads.length === 0) {
         fetchLeads();
-      } else if (activeTab === "proprietarios" && properties.length === 0) {
+      } else if (activeTab === "proprietarios") {
         fetchProperties();
       }
     }
-  }, [activeTab, connectionStatus, fetchLeads, fetchProperties, leads.length, properties.length]);
+  }, [activeTab, connectionStatus, fetchLeads, fetchProperties, leads.length]);
 
   // Save Config
   const handleSaveConfig = async () => {
@@ -885,18 +887,18 @@ export default function ImoviewIntegrationPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Card className="p-3.5 border-border/60 shadow-xs bg-card">
                 <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
-                  <span>Total de Imóveis</span>
+                  <span>{origemFiltro === "proprietarios" ? "Proprietários no CRM" : "Imóveis no Catálogo"}</span>
                   <Home className="h-3.5 w-3.5 text-primary" />
                 </div>
                 <div className="text-xl font-bold mt-1 text-foreground">{properties.length}</div>
                 <div className="text-[10px] text-muted-foreground mt-0.5 font-medium">
-                  {propsWithPhone} com telefone do proprietário
+                  {propsWithPhone} com WhatsApp válido
                 </div>
               </Card>
 
               <Card className="p-3.5 border-border/60 shadow-xs bg-card">
                 <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
-                  <span>Sem Atualização &gt; 30d</span>
+                  <span>Sem Contato &gt; 30d</span>
                   <Clock className="h-3.5 w-3.5 text-amber-500" />
                 </div>
                 <div className="text-xl font-bold mt-1 text-amber-600 dark:text-amber-400">{propsWith30Days}</div>
@@ -905,16 +907,16 @@ export default function ImoviewIntegrationPage() {
 
               <Card className="p-3.5 border-border/60 shadow-xs bg-card">
                 <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
-                  <span>Sem Atualização &gt; 60d</span>
+                  <span>Sem Contato &gt; 60d</span>
                   <Clock className="h-3.5 w-3.5 text-orange-500" />
                 </div>
                 <div className="text-xl font-bold mt-1 text-orange-600 dark:text-orange-400">{propsWith60Days}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">Risco de venda por terceiros</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">Risco de venda/esfriamento</div>
               </Card>
 
               <Card className="p-3.5 border-border/60 shadow-xs bg-card">
                 <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
-                  <span>Sem Atualização &gt; 90d</span>
+                  <span>Sem Contato &gt; 90d</span>
                   <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
                 </div>
                 <div className="text-xl font-bold mt-1 text-rose-600 dark:text-rose-400">{propsWith90Days}</div>
@@ -926,19 +928,34 @@ export default function ImoviewIntegrationPage() {
             <Card className="border-border/60 shadow-xs">
               <CardContent className="p-4 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                  {/* Origem dos Dados */}
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                      <Users className="h-3.5 w-3.5 text-primary" /> Origem dos Dados:
+                    </Label>
+                    <select
+                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 font-semibold focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={origemFiltro}
+                      onChange={(e) => setOrigemFiltro(e.target.value as "proprietarios" | "imoveis")}
+                    >
+                      <option value="proprietarios">Proprietários (Base CRM - WhatsApp)</option>
+                      <option value="imoveis">Catálogo de Imóveis (Portfólio)</option>
+                    </select>
+                  </div>
+
                   {/* Filtro de Dias Sem Atualização */}
                   <div className="sm:col-span-3 space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                      <Clock className="h-3.5 w-3.5 text-primary" /> Dias Sem Atualização:
+                      <Clock className="h-3.5 w-3.5 text-primary" /> Dias Sem Interação:
                     </Label>
                     <select
                       className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       value={diasFiltroProps}
                       onChange={(e) => setDiasFiltroProps(Number(e.target.value))}
                     >
-                      <option value={0}>Todos os imóveis ativos</option>
-                      <option value={30}>Mais de 30 dias sem alteração</option>
-                      <option value={60}>Mais de 60 dias sem alteração</option>
+                      <option value={0}>Todos os contatos cadastrados</option>
+                      <option value={30}>Mais de 30 dias sem contato</option>
+                      <option value={60}>Mais de 60 dias sem contato</option>
                       <option value={90}>Mais de 90 dias (Urgente)</option>
                     </select>
                   </div>
@@ -946,7 +963,7 @@ export default function ImoviewIntegrationPage() {
                   {/* Finalidade */}
                   <div className="sm:col-span-3 space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                      <DollarSign className="h-3.5 w-3.5 text-primary" /> Finalidade:
+                      <DollarSign className="h-3.5 w-3.5 text-primary" /> Finalidade / Carteira:
                     </Label>
                     <select
                       className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -959,25 +976,6 @@ export default function ImoviewIntegrationPage() {
                     </select>
                   </div>
 
-                  {/* Tipo de Imóvel */}
-                  <div className="sm:col-span-3 space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                      <Home className="h-3.5 w-3.5 text-primary" /> Tipo:
-                    </Label>
-                    <select
-                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={tipoFiltro}
-                      onChange={(e) => setTipoFiltro(e.target.value)}
-                    >
-                      <option value="">Todos os tipos</option>
-                      <option value="Apartamento">Apartamento</option>
-                      <option value="Casa">Casa</option>
-                      <option value="Sobrado">Sobrado</option>
-                      <option value="Comercial">Comercial</option>
-                      <option value="Terreno">Terreno</option>
-                    </select>
-                  </div>
-
                   {/* Botão de Busca */}
                   <div className="sm:col-span-3">
                     <Button
@@ -986,7 +984,7 @@ export default function ImoviewIntegrationPage() {
                       disabled={propertiesLoading}
                     >
                       <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${propertiesLoading ? "animate-spin" : ""}`} />
-                      {propertiesLoading ? "Buscando Imóveis..." : "Filtrar Imóveis"}
+                      {propertiesLoading ? "Buscando..." : "Filtrar Contatos"}
                     </Button>
                   </div>
                 </div>

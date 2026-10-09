@@ -357,117 +357,206 @@ export async function fetchImoviewProperties(options: {
   limite?: number;
   tipo?: string;
   termo?: string;
+  origem?: "proprietarios" | "imoveis";
 }): Promise<ImoviewProperty[]> {
   const config = await getImoviewConfig();
   if (!config.apiKey) return [];
 
-  const headers = {
-    ...buildHeaders(config.apiKey),
-    "Content-Type": "application/json",
-  };
+  const headers = buildHeaders(config.apiKey);
   const cleanBase = config.baseUrl;
   const maxLimit = options.limite ?? 100;
   const minDays = options.diasSemAtualizacao ?? 0;
   const allProperties: ImoviewProperty[] = [];
   const now = Date.now();
+  const origem = options.origem || "proprietarios";
 
-  const finalidades = options.finalidade && options.finalidade !== "0"
-    ? [options.finalidade]
-    : ["2", "1"];
+  if (origem === "proprietarios") {
+    // Tipos de relacionamento no Imoview:
+    // 6 = Proprietário (Venda - 6.366 clientes cadastrados)
+    // 2 = Locador / Proprietário (Locação - 1.149 clientes cadastrados)
+    let tiposRel: number[] = [6, 2];
+    if (options.finalidade === "2") tiposRel = [6];
+    else if (options.finalidade === "1") tiposRel = [2];
 
-  for (const fin of finalidades) {
-    for (let page = 1; page <= 5; page++) {
+    for (const tipoRel of tiposRel) {
       if (allProperties.length >= maxLimit) break;
+      const pagesToFetch = Math.min(6, Math.ceil((maxLimit - allProperties.length) / 20) + 1);
 
-      try {
-        const bodyPayload: any = {
-          numeroPagina: page,
-          numeroRegistros: 30,
-          finalidade: fin,
-        };
+      for (let page = 1; page <= pagesToFetch; page++) {
+        if (allProperties.length >= maxLimit) break;
 
-        const res = await fetch(`${cleanBase}/Imovel/RetornarImoveis`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(bodyPayload),
-        });
+        try {
+          const u = new URL(`${cleanBase}/Cliente/RetornarClientes`);
+          u.searchParams.set("numeroPagina", String(page));
+          u.searchParams.set("numeroRegistros", "20"); // Imoview limit is strictly 20!
+          u.searchParams.set("tipoRelacionamento", String(tipoRel));
 
-        if (!res.ok) break;
-
-        const data = await res.json();
-        if (!data.lista || !Array.isArray(data.lista) || data.lista.length === 0) {
-          break;
-        }
-
-        for (const item of data.lista) {
-          const dateStr = item.datahoraultimaalteracao || item.datahoraultimavalidacao || item.datahoracadastro;
-          const updateDate = parseBrDate(dateStr);
-          const diffDays = updateDate
-            ? Math.max(0, Math.floor((now - updateDate.getTime()) / (1000 * 60 * 60 * 24)))
-            : 0;
-
-          if (minDays > 0 && diffDays < minDays) continue;
-
-          if (options.tipo && item.tipo && !item.tipo.toLowerCase().includes(options.tipo.toLowerCase())) {
-            continue;
-          }
-
-          if (options.termo) {
-            const q = options.termo.toLowerCase();
-            const match =
-              String(item.codigo).includes(q) ||
-              (item.titulo || "").toLowerCase().includes(q) ||
-              (item.bairro || "").toLowerCase().includes(q) ||
-              (item.cidade || "").toLowerCase().includes(q);
-            if (!match) continue;
-          }
-
-          const propNome = (
-            item.proprietarios?.[0]?.nome ||
-            item.proprietarios?.[0]?.proprietario ||
-            item.nomeproprietario ||
-            item.proprietario ||
-            item.contatonome ||
-            "Proprietário"
-          ).trim();
-
-          const rawPhone = (
-            item.proprietarios?.[0]?.celular ||
-            item.proprietarios?.[0]?.telefone ||
-            item.telefoneproprietario ||
-            item.celularproprietario ||
-            item.celular ||
-            item.telefone ||
-            item.telefoneunidade ||
-            ""
-          ).trim();
-
-          const formattedValor = item.valor
-            ? (typeof item.valor === "number" ? `R$ ${item.valor.toLocaleString("pt-BR")}` : String(item.valor))
-            : "Sob Consulta";
-
-          allProperties.push({
-            codigo: String(item.codigo),
-            titulo: item.titulo || `${item.tipo || "Imóvel"} em ${item.bairro || "Santos"}`,
-            tipo: item.tipo || "Imóvel",
-            finalidade: item.finalidade === "2" || item.finalidade === 2 ? "Venda" : "Locação",
-            valor: formattedValor,
-            bairro: item.bairro || "",
-            cidade: item.cidade || "",
-            quartos: item.numeroquartos != null ? String(item.numeroquartos) : undefined,
-            vagas: item.numerovagas != null ? String(item.numerovagas) : undefined,
-            dataUltimaAlteracao: dateStr || undefined,
-            diasSemAtualizacao: diffDays,
-            proprietarioNome: propNome,
-            proprietarioTelefone: rawPhone,
-            fotoPrincipal: item.urlfotoprincipal || item.urlfotoprincipalm || undefined,
+          const res = await fetch(u.toString(), {
+            method: "GET",
+            headers,
           });
 
-          if (allProperties.length >= maxLimit) break;
+          if (!res.ok) break;
+
+          const data = await res.json();
+          if (!data.lista || !Array.isArray(data.lista) || data.lista.length === 0) {
+            break;
+          }
+
+          for (const item of data.lista) {
+            const dateStr = item.dataultimaalteracao || item.datainclusao;
+            const updateDate = parseBrDate(dateStr);
+            const diffDays = updateDate
+              ? Math.max(0, Math.floor((now - updateDate.getTime()) / (1000 * 60 * 60 * 24)))
+              : 0;
+
+            if (minDays > 0 && diffDays < minDays) continue;
+
+            const propNome = (item.nome || item.fantasia || "Proprietário").trim();
+            // Pega o primeiro telefone válido
+            const rawPhone = (
+              item.telefones?.find((t: any) => t.numero && t.numero.replace(/\D/g, "").length >= 8)?.numero ||
+              ""
+            ).trim();
+
+            if (options.termo) {
+              const q = options.termo.toLowerCase();
+              const match =
+                String(item.codigo).includes(q) ||
+                propNome.toLowerCase().includes(q) ||
+                rawPhone.includes(q);
+              if (!match) continue;
+            }
+
+            const propRel = item.relacionamentos?.find((r: any) => r.proprietario !== undefined)?.proprietario || 0;
+            const locRel = item.relacionamentos?.find((r: any) => r.locador !== undefined)?.locador || 0;
+            const qtdImoveis = propRel || locRel || 1;
+            const finalidadeNome = tipoRel === 6 ? "Venda" : "Locação";
+
+            allProperties.push({
+              codigo: String(item.codigo),
+              titulo: `Proprietário (${qtdImoveis} imóvel${qtdImoveis > 1 ? "is" : ""})`,
+              tipo: finalidadeNome,
+              finalidade: finalidadeNome,
+              valor: `${qtdImoveis} imóvel(is)`,
+              bairro: item.enderecos?.[0]?.bairro || "Santos",
+              cidade: item.enderecos?.[0]?.cidade || "SP",
+              dataUltimaAlteracao: dateStr || undefined,
+              diasSemAtualizacao: diffDays,
+              proprietarioNome: propNome,
+              proprietarioTelefone: rawPhone,
+            });
+
+            if (allProperties.length >= maxLimit) break;
+          }
+        } catch (e: any) {
+          logger.error("Imoview", `Error fetching owners page ${page}:`, e);
+          break;
         }
-      } catch (e: any) {
-        logger.error("Imoview", `Error fetching properties page ${page}:`, e);
-        break;
+      }
+    }
+  } else {
+    // Origem === "imoveis" (Catálogo de Imóveis)
+    const finalidades = options.finalidade && options.finalidade !== "0"
+      ? [options.finalidade]
+      : ["2", "1"];
+
+    for (const fin of finalidades) {
+      for (let page = 1; page <= 5; page++) {
+        if (allProperties.length >= maxLimit) break;
+
+        try {
+          const bodyPayload: any = {
+            numeroPagina: page,
+            numeroRegistros: 20, // Imoview hard limit is 20!
+            finalidade: fin,
+          };
+
+          const res = await fetch(`${cleanBase}/Imovel/RetornarImoveis`, {
+            method: "POST",
+            headers: {
+              ...headers,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(bodyPayload),
+          });
+
+          if (!res.ok) break;
+
+          const data = await res.json();
+          if (!data.lista || !Array.isArray(data.lista) || data.lista.length === 0) {
+            break;
+          }
+
+          for (const item of data.lista) {
+            const dateStr = item.datahoraultimaalteracao || item.datahoraultimavalidacao || item.datahoracadastro;
+            const updateDate = parseBrDate(dateStr);
+            const diffDays = updateDate
+              ? Math.max(0, Math.floor((now - updateDate.getTime()) / (1000 * 60 * 60 * 24)))
+              : 0;
+
+            if (minDays > 0 && diffDays < minDays) continue;
+
+            if (options.tipo && item.tipo && !item.tipo.toLowerCase().includes(options.tipo.toLowerCase())) {
+              continue;
+            }
+
+            if (options.termo) {
+              const q = options.termo.toLowerCase();
+              const match =
+                String(item.codigo).includes(q) ||
+                (item.titulo || "").toLowerCase().includes(q) ||
+                (item.bairro || "").toLowerCase().includes(q) ||
+                (item.cidade || "").toLowerCase().includes(q);
+              if (!match) continue;
+            }
+
+            const propNome = (
+              item.proprietarios?.[0]?.nome ||
+              item.proprietarios?.[0]?.proprietario ||
+              item.nomeproprietario ||
+              item.proprietario ||
+              item.contatonome ||
+              "Proprietário"
+            ).trim();
+
+            const rawPhone = (
+              item.proprietarios?.[0]?.celular ||
+              item.proprietarios?.[0]?.telefone ||
+              item.telefoneproprietario ||
+              item.celularproprietario ||
+              item.celular ||
+              item.telefone ||
+              ""
+            ).trim();
+
+            const formattedValor = item.valor
+              ? (typeof item.valor === "number" ? `R$ ${item.valor.toLocaleString("pt-BR")}` : String(item.valor))
+              : "Sob Consulta";
+
+            allProperties.push({
+              codigo: String(item.codigo),
+              titulo: item.titulo || `${item.tipo || "Imóvel"} em ${item.bairro || "Santos"}`,
+              tipo: item.tipo || "Imóvel",
+              finalidade: item.finalidade === "2" || item.finalidade === 2 ? "Venda" : "Locação",
+              valor: formattedValor,
+              bairro: item.bairro || "",
+              cidade: item.cidade || "",
+              quartos: item.numeroquartos != null ? String(item.numeroquartos) : undefined,
+              vagas: item.numerovagas != null ? String(item.numerovagas) : undefined,
+              dataUltimaAlteracao: dateStr || undefined,
+              diasSemAtualizacao: diffDays,
+              proprietarioNome: propNome,
+              proprietarioTelefone: rawPhone,
+              fotoPrincipal: item.urlfotoprincipal || item.urlfotoprincipalm || undefined,
+            });
+
+            if (allProperties.length >= maxLimit) break;
+          }
+        } catch (e: any) {
+          logger.error("Imoview", `Error fetching properties page ${page}:`, e);
+          break;
+        }
       }
     }
   }
