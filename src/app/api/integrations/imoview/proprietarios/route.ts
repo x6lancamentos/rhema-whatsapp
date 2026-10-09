@@ -12,11 +12,15 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const dias = parseInt(searchParams.get("dias") || "0", 10);
+    const diasMax = parseInt(searchParams.get("diasMax") || "0", 10);
+    const dataInicio = searchParams.get("dataInicio") || undefined;
+    const dataFim = searchParams.get("dataFim") || undefined;
     const finalidade = searchParams.get("finalidade") || "0";
     const tipo = searchParams.get("tipo") || undefined;
     const termo = searchParams.get("termo") || undefined;
     const limite = parseInt(searchParams.get("limite") || "100", 10);
     const origem = (searchParams.get("origem") as "proprietarios" | "imoveis") || "proprietarios";
+    const apenasComTelefone = searchParams.get("apenasComTelefone") === "true";
 
     const config = await getImoviewConfig();
     if (!config.apiKey) {
@@ -30,11 +34,15 @@ export async function GET(request: NextRequest) {
 
     const properties = await fetchImoviewProperties({
       diasSemAtualizacao: dias,
+      diasMaximos: diasMax > 0 ? diasMax : undefined,
+      dataInicio,
+      dataFim,
       finalidade,
       tipo,
       termo,
       limite,
       origem,
+      somenteComTelefone: apenasComTelefone,
     });
 
     return NextResponse.json({

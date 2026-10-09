@@ -353,19 +353,28 @@ export async function recordImoviewInteraction(
 
 export async function fetchImoviewProperties(options: {
   diasSemAtualizacao?: number;
+  diasMaximos?: number;
+  dataInicio?: string;
+  dataFim?: string;
   finalidade?: string; // "1" = Locação, "2" = Venda, "0" = Todos
   limite?: number;
   tipo?: string;
   termo?: string;
   origem?: "proprietarios" | "imoveis";
+  somenteComTelefone?: boolean;
 }): Promise<ImoviewProperty[]> {
   const config = await getImoviewConfig();
   if (!config.apiKey) return [];
 
   const headers = buildHeaders(config.apiKey);
   const cleanBase = config.baseUrl;
-  const maxLimit = options.limite ?? 100;
+  const maxLimit = Math.min(500, options.limite ?? 100);
   const minDays = options.diasSemAtualizacao ?? 0;
+  const maxDays = options.diasMaximos ?? 0;
+  const startDate = options.dataInicio ? new Date(options.dataInicio) : null;
+  const endDate = options.dataFim ? new Date(options.dataFim) : null;
+  if (endDate) endDate.setHours(23, 59, 59, 999);
+
   const allProperties: ImoviewProperty[] = [];
   const now = Date.now();
   const origem = options.origem || "proprietarios";
@@ -380,7 +389,7 @@ export async function fetchImoviewProperties(options: {
 
     for (const tipoRel of tiposRel) {
       if (allProperties.length >= maxLimit) break;
-      const pagesToFetch = Math.min(6, Math.ceil((maxLimit - allProperties.length) / 20) + 1);
+      const pagesToFetch = Math.min(25, Math.ceil((maxLimit - allProperties.length) / 20) + 1);
 
       for (let page = 1; page <= pagesToFetch; page++) {
         if (allProperties.length >= maxLimit) break;
@@ -410,7 +419,13 @@ export async function fetchImoviewProperties(options: {
               ? Math.max(0, Math.floor((now - updateDate.getTime()) / (1000 * 60 * 60 * 24)))
               : 0;
 
+            // Filtros de dias
             if (minDays > 0 && diffDays < minDays) continue;
+            if (maxDays > 0 && diffDays > maxDays) continue;
+
+            // Filtros de data específica
+            if (startDate && updateDate && updateDate < startDate) continue;
+            if (endDate && updateDate && updateDate > endDate) continue;
 
             const propNome = (item.nome || item.fantasia || "Proprietário").trim();
             // Pega o primeiro telefone válido
@@ -418,6 +433,10 @@ export async function fetchImoviewProperties(options: {
               item.telefones?.find((t: any) => t.numero && t.numero.replace(/\D/g, "").length >= 8)?.numero ||
               ""
             ).trim();
+
+            if (options.somenteComTelefone && (!rawPhone || rawPhone.replace(/\D/g, "").length < 8)) {
+              continue;
+            }
 
             if (options.termo) {
               const q = options.termo.toLowerCase();

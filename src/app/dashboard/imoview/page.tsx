@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,8 @@ import {
   DollarSign,
   AlertCircle,
   X,
+  FilterX,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SessionGuard } from "@/components/dashboard/session-guard";
@@ -123,8 +125,18 @@ export default function ImoviewIntegrationPage() {
   const [properties, setProperties] = useState<ImoviewProperty[]>([]);
   const [selectedPropertyCodes, setSelectedPropertyCodes] = useState<string[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
+  const [hasSearchedProps, setHasSearchedProps] = useState(false);
+  const abortPropsRef = useRef<AbortController | null>(null);
+
   const [origemFiltro, setOrigemFiltro] = useState<"proprietarios" | "imoveis">("proprietarios");
-  const [diasFiltroProps, setDiasFiltroProps] = useState(0); // 0 = todos, 30, 60, 90
+  const [periodoModo, setPeriodoModo] = useState<"presets" | "custom_days" | "custom_range">("presets");
+  const [diasFiltroProps, setDiasFiltroProps] = useState(0); // 0 = todos, 15, 30, 60, 90, 180
+  const [diasMinimosCustom, setDiasMinimosCustom] = useState("");
+  const [diasMaximosCustom, setDiasMaximosCustom] = useState("");
+  const [dataInicioCustom, setDataInicioCustom] = useState("");
+  const [dataFimCustom, setDataFimCustom] = useState("");
+  const [limiteFiltroProps, setLimiteFiltroProps] = useState(100);
+  const [apenasComTelefoneFiltro, setApenasComTelefoneFiltro] = useState(true);
   const [finalidadeFiltro, setFinalidadeFiltro] = useState("0"); // 0 = todos, 2 = Venda, 1 = Locacao
   const [tipoFiltro, setTipoFiltro] = useState("");
   const [searchPropTerm, setSearchPropTerm] = useState("");
@@ -239,24 +251,47 @@ export default function ImoviewIntegrationPage() {
     }
   }, [diasFiltroLeads, corretorFiltro]);
 
-  // Fetch Properties & Owners
+  // Fetch Properties & Owners (Triggered ONLY on user action)
   const fetchProperties = useCallback(async () => {
+    // Cancela requisição anterior se houver
+    if (abortPropsRef.current) {
+      abortPropsRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortPropsRef.current = controller;
+
     setPropertiesLoading(true);
+    setHasSearchedProps(true);
+
     try {
       const params = new URLSearchParams();
       params.set("origem", origemFiltro);
-      if (diasFiltroProps > 0) params.set("dias", String(diasFiltroProps));
+      params.set("limite", String(limiteFiltroProps));
+      params.set("apenasComTelefone", apenasComTelefoneFiltro ? "true" : "false");
+
+      if (periodoModo === "presets") {
+        if (diasFiltroProps > 0) params.set("dias", String(diasFiltroProps));
+      } else if (periodoModo === "custom_days") {
+        if (diasMinimosCustom) params.set("dias", diasMinimosCustom);
+        if (diasMaximosCustom) params.set("diasMax", diasMaximosCustom);
+      } else if (periodoModo === "custom_range") {
+        if (dataInicioCustom) params.set("dataInicio", dataInicioCustom);
+        if (dataFimCustom) params.set("dataFim", dataFimCustom);
+      }
+
       if (finalidadeFiltro && finalidadeFiltro !== "0") params.set("finalidade", finalidadeFiltro);
       if (tipoFiltro) params.set("tipo", tipoFiltro);
       if (searchPropTerm) params.set("termo", searchPropTerm);
-      params.set("limite", "100");
 
-      const res = await fetch(`/api/integrations/imoview/proprietarios?${params.toString()}`);
+      const res = await fetch(`/api/integrations/imoview/proprietarios?${params.toString()}`, {
+        signal: controller.signal,
+      });
+
       if (res.ok) {
         const json = await res.json();
         const data = json.data || [];
         setProperties(data);
-        // Seleciona por padrão imóveis com proprietário que tenha telefone
+        // Seleciona por padrão contatos com telefone válido
         const withPhones = data
           .filter((p: ImoviewProperty) => p.proprietarioTelefone && p.proprietarioTelefone.replace(/\D/g, "").length >= 8)
           .map((p: ImoviewProperty) => p.codigo);
@@ -264,15 +299,61 @@ export default function ImoviewIntegrationPage() {
 
         if (json.configured === false) {
           setActiveTab("config");
-          toast.warning("Configure a Chave de API do Imoview para buscar os imóveis.");
+          toast.warning("Configure a Chave de API do Imoview para buscar os contatos.");
+        } else {
+          toast.success(`${data.length} contatos encontrados no Imoview!`);
         }
+      } else {
+        toast.error("Erro ao carregar contatos do Imoview");
       }
-    } catch {
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        // Usuário cancelou a busca voluntariamente
+        return;
+      }
       toast.error("Erro ao carregar proprietários do Imoview");
     } finally {
       setPropertiesLoading(false);
+      abortPropsRef.current = null;
     }
-  }, [origemFiltro, diasFiltroProps, finalidadeFiltro, tipoFiltro, searchPropTerm]);
+  }, [
+    origemFiltro,
+    limiteFiltroProps,
+    apenasComTelefoneFiltro,
+    periodoModo,
+    diasFiltroProps,
+    diasMinimosCustom,
+    diasMaximosCustom,
+    dataInicioCustom,
+    dataFimCustom,
+    finalidadeFiltro,
+    tipoFiltro,
+    searchPropTerm,
+  ]);
+
+  const handleCancelSearch = () => {
+    if (abortPropsRef.current) {
+      abortPropsRef.current.abort();
+      abortPropsRef.current = null;
+    }
+    setPropertiesLoading(false);
+    toast.info("Busca de proprietários interrompida.");
+  };
+
+  const handleResetFilters = () => {
+    setOrigemFiltro("proprietarios");
+    setPeriodoModo("presets");
+    setDiasFiltroProps(0);
+    setDiasMinimosCustom("");
+    setDiasMaximosCustom("");
+    setDataInicioCustom("");
+    setDataFimCustom("");
+    setFinalidadeFiltro("0");
+    setLimiteFiltroProps(100);
+    setApenasComTelefoneFiltro(true);
+    setSearchPropTerm("");
+    toast.info("Filtros redefinidos");
+  };
 
   useEffect(() => {
     fetchConfig();
@@ -284,11 +365,10 @@ export default function ImoviewIntegrationPage() {
     if (connectionStatus === "connected") {
       if (activeTab === "resgate" && leads.length === 0) {
         fetchLeads();
-      } else if (activeTab === "proprietarios") {
-        fetchProperties();
       }
+      // NOTA: fetchProperties() NÃO é chamado automaticamente ao entrar na aba! O usuário tem controle manual.
     }
-  }, [activeTab, connectionStatus, fetchLeads, fetchProperties, leads.length]);
+  }, [activeTab, connectionStatus, fetchLeads, leads.length]);
 
   // Save Config
   const handleSaveConfig = async () => {
@@ -378,6 +458,10 @@ export default function ImoviewIntegrationPage() {
 
   // Filtered Properties
   const filteredProperties = properties.filter((p) => {
+    if (apenasComTelefoneFiltro) {
+      const hasPhone = p.proprietarioTelefone && p.proprietarioTelefone.replace(/\D/g, "").length >= 8;
+      if (!hasPhone) return false;
+    }
     if (!searchPropTerm) return true;
     const term = searchPropTerm.toLowerCase();
     return (
@@ -927,6 +1011,7 @@ export default function ImoviewIntegrationPage() {
             {/* Painel de Filtros dos Proprietários */}
             <Card className="border-border/60 shadow-xs">
               <CardContent className="p-4 space-y-4">
+                {/* Linha Superior: Origem, Finalidade, Quantidade Máxima e Ações Principais */}
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                   {/* Origem dos Dados */}
                   <div className="sm:col-span-3 space-y-1">
@@ -943,24 +1028,7 @@ export default function ImoviewIntegrationPage() {
                     </select>
                   </div>
 
-                  {/* Filtro de Dias Sem Atualização */}
-                  <div className="sm:col-span-3 space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                      <Clock className="h-3.5 w-3.5 text-primary" /> Dias Sem Interação:
-                    </Label>
-                    <select
-                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={diasFiltroProps}
-                      onChange={(e) => setDiasFiltroProps(Number(e.target.value))}
-                    >
-                      <option value={0}>Todos os contatos cadastrados</option>
-                      <option value={30}>Mais de 30 dias sem contato</option>
-                      <option value={60}>Mais de 60 dias sem contato</option>
-                      <option value={90}>Mais de 90 dias (Urgente)</option>
-                    </select>
-                  </div>
-
-                  {/* Finalidade */}
+                  {/* Finalidade / Carteira */}
                   <div className="sm:col-span-3 space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
                       <DollarSign className="h-3.5 w-3.5 text-primary" /> Finalidade / Carteira:
@@ -976,27 +1044,201 @@ export default function ImoviewIntegrationPage() {
                     </select>
                   </div>
 
-                  {/* Botão de Busca */}
-                  <div className="sm:col-span-3">
+                  {/* Limite de Registros */}
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                      <SlidersHorizontal className="h-3.5 w-3.5 text-primary" /> Quantidade Máx.:
+                    </Label>
+                    <select
+                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={limiteFiltroProps}
+                      onChange={(e) => setLimiteFiltroProps(Number(e.target.value))}
+                    >
+                      <option value={50}>50 contatos (Rápido)</option>
+                      <option value={100}>100 contatos (Padrão)</option>
+                      <option value={200}>200 contatos</option>
+                      <option value={500}>500 contatos</option>
+                    </select>
+                  </div>
+
+                  {/* Botões de Ação da Busca: Filtrar ou Interromper */}
+                  <div className="sm:col-span-4 flex items-center gap-2">
+                    {propertiesLoading ? (
+                      <Button
+                        className="flex-1 h-9 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs animate-pulse"
+                        onClick={handleCancelSearch}
+                      >
+                        <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
+                        Interromper Busca
+                      </Button>
+                    ) : (
+                      <Button
+                        className="flex-1 h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                        onClick={fetchProperties}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                        Filtrar Contatos
+                      </Button>
+                    )}
+
                     <Button
-                      className="w-full h-9 text-xs font-bold"
-                      onClick={fetchProperties}
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                      title="Redefinir todos os filtros"
+                      onClick={handleResetFilters}
                       disabled={propertiesLoading}
                     >
-                      <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${propertiesLoading ? "animate-spin" : ""}`} />
-                      {propertiesLoading ? "Buscando..." : "Filtrar Contatos"}
+                      <FilterX className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
 
-                {/* Barra de Busca de Texto e Ações em Massa */}
+                {/* Linha Inferior: Personalização de Período & Filtro de WhatsApp */}
+                <div className="p-3 rounded-lg bg-muted/40 border border-border/40 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Seletor de Modo de Período */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-primary" /> Período sem Contato:
+                      </span>
+                      <div className="flex items-center gap-1 bg-background p-0.5 rounded-md border border-input text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setPeriodoModo("presets")}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                            periodoModo === "presets"
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Predefinições
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPeriodoModo("custom_days")}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                            periodoModo === "custom_days"
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Dias Personalizados
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPeriodoModo("custom_range")}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                            periodoModo === "custom_range"
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Intervalo de Datas
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Toggle: Apenas com WhatsApp */}
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground select-none">
+                      <input
+                        type="checkbox"
+                        checked={apenasComTelefoneFiltro}
+                        onChange={(e) => setApenasComTelefoneFiltro(e.target.checked)}
+                        className="rounded border-input text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                      />
+                      <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Apenas com WhatsApp válido</span>
+                    </label>
+                  </div>
+
+                  {/* Inputs específicos do modo de período */}
+                  {periodoModo === "presets" && (
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      {[
+                        { label: "Todos os contatos", val: 0 },
+                        { label: "> 15 dias", val: 15 },
+                        { label: "> 30 dias (Recomendado)", val: 30 },
+                        { label: "> 60 dias (Esfriando)", val: 60 },
+                        { label: "> 90 dias (Urgente)", val: 90 },
+                        { label: "> 180 dias (+6 meses)", val: 180 },
+                      ].map((item) => (
+                        <button
+                          key={item.val}
+                          type="button"
+                          onClick={() => setDiasFiltroProps(item.val)}
+                          className={`px-3 py-1 rounded-full text-xs transition-all cursor-pointer border ${
+                            diasFiltroProps === item.val
+                              ? "bg-emerald-600/15 border-emerald-600 text-emerald-600 dark:text-emerald-400 font-bold"
+                              : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {periodoModo === "custom_days" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 max-w-md">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Mínimo de dias sem alteração:</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="Ex: 45 dias"
+                          value={diasMinimosCustom}
+                          onChange={(e) => setDiasMinimosCustom(e.target.value)}
+                          className="h-8 text-xs bg-background"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Máximo de dias (opcional):</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="Ex: 120 dias"
+                          value={diasMaximosCustom}
+                          onChange={(e) => setDiasMaximosCustom(e.target.value)}
+                          className="h-8 text-xs bg-background"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {periodoModo === "custom_range" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 max-w-md">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Data Inicial (Desde):</Label>
+                        <Input
+                          type="date"
+                          value={dataInicioCustom}
+                          onChange={(e) => setDataInicioCustom(e.target.value)}
+                          className="h-8 text-xs bg-background"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Data Final (Até):</Label>
+                        <Input
+                          type="date"
+                          value={dataFimCustom}
+                          onChange={(e) => setDataFimCustom(e.target.value)}
+                          className="h-8 text-xs bg-background"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Barra de Busca de Texto Instantânea e Ações em Massa */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-border/40">
                   <div className="relative flex-1 max-w-sm">
-                    <Search className="h-3.5 w-3.5 absolute left-2.5 top-3 text-muted-foreground" />
+                    <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
                     <Input
-                      placeholder="Buscar por código, proprietário, bairro..."
+                      placeholder="Buscar por código, proprietário, bairro, telefone..."
                       value={searchPropTerm}
                       onChange={(e) => setSearchPropTerm(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && fetchProperties()}
                       className="h-8 text-xs pl-8"
                     />
                   </div>
@@ -1009,7 +1251,7 @@ export default function ImoviewIntegrationPage() {
                       onClick={selectAllProperties}
                       disabled={filteredProperties.length === 0}
                     >
-                      {selectedPropertyCodes.length === filteredProperties.length ? (
+                      {selectedPropertyCodes.length === filteredProperties.length && filteredProperties.length > 0 ? (
                         <>
                           <CheckSquare className="h-3.5 w-3.5 mr-1 text-primary" /> Desmarcar Todos
                         </>
@@ -1034,16 +1276,76 @@ export default function ImoviewIntegrationPage() {
               </CardContent>
             </Card>
 
-            {/* Tabela de Imóveis & Proprietários */}
-            {filteredProperties.length === 0 ? (
-              <Card className="p-8 text-center text-muted-foreground border-dashed">
-                <Home className="h-10 w-10 mx-auto mb-2 opacity-30 text-emerald-600" />
-                <p className="text-sm font-semibold">Nenhum imóvel encontrado com os filtros selecionados.</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Clique em &quot;Filtrar Imóveis&quot; ou ajuste o filtro de dias sem alteração.
-                </p>
+            {/* Banner de Carregamento com Botão de Interromper */}
+            {propertiesLoading && (
+              <Card className="border-emerald-500/40 bg-emerald-500/10 p-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5 text-emerald-900 dark:text-emerald-200">
+                    <RefreshCw className="h-4 w-4 animate-spin text-emerald-600 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Consultando proprietários no Imoview CRM...</div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Esta consulta pode levar alguns segundos dependendo da quantidade de contatos.
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-8 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+                    onClick={handleCancelSearch}
+                  >
+                    <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
+                    Interromper Busca
+                  </Button>
+                </div>
               </Card>
-            ) : (
+            )}
+
+            {/* Empty State Inicial: Antes da primeira busca */}
+            {!propertiesLoading && !hasSearchedProps && properties.length === 0 && (
+              <Card className="p-10 text-center border-dashed bg-card/60">
+                <Users className="h-12 w-12 mx-auto mb-3 text-emerald-600 opacity-70" />
+                <h3 className="text-base font-bold text-foreground">
+                  Pronto para consultar proprietários no Imoview
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 mb-4">
+                  Ajuste os filtros de período e carteira acima e clique no botão verde para carregar a lista de proprietários da sua base.
+                </p>
+                <Button
+                  className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                  onClick={fetchProperties}
+                >
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  Filtrar Contatos Agora
+                </Button>
+              </Card>
+            )}
+
+            {/* Empty State: Busca realizada mas sem resultados */}
+            {!propertiesLoading && hasSearchedProps && filteredProperties.length === 0 && (
+              <Card className="p-10 text-center border-dashed bg-card/60">
+                <AlertCircle className="h-12 w-12 mx-auto mb-3 text-amber-500 opacity-70" />
+                <h3 className="text-base font-bold text-foreground">
+                  Nenhum proprietário encontrado com os filtros selecionados
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 mb-4">
+                  Tente alterar os dias sem contato, mudar para &quot;Todos os contatos&quot; ou selecionar outra carteira.
+                </p>
+                <div className="flex justify-center gap-2">
+                  <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={handleResetFilters}>
+                    <FilterX className="h-3.5 w-3.5 mr-1.5" />
+                    Limpar Filtros
+                  </Button>
+                  <Button size="sm" className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white" onClick={fetchProperties}>
+                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                    Tentar Novamente
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            {filteredProperties.length > 0 && (
               <div className="border border-border/60 rounded-xl overflow-hidden shadow-xs bg-card">
                 <div className="max-h-[550px] overflow-y-auto">
                   <table className="w-full text-xs">
