@@ -72,19 +72,19 @@ O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendim
 
 ## 4. 💬 Central de Chat & Atendimento ao Cliente
 
-- [ ] **Correção na Quebra de Texto das Mensagens**:
+- [x] **Correção na Quebra de Texto das Mensagens**:
   - Substituição de `break-all` por `break-words [overflow-wrap:anywhere]` para evitar palavras do português cortadas ao meio.
-- [ ] **Player de Áudio Moderno (Voz / PTT WhatsApp)**:
+- [x] **Player de Áudio Moderno (Voz / PTT WhatsApp)**:
   - Suporte completo a áudios gravados no WhatsApp (formato Opus/OGG).
-  - Controle de velocidade de reprodução (`1x`, `1.5x`, `2x`) e barra de progresso com waveform.
-- [ ] **Renderização de Mensagens Especiais**:
+  - Controle de velocidade de reprodução (`1x`, `1.5x`, `2x`) e barra de progresso com waveform interativo.
+- [x] **Renderização de Mensagens Especiais**:
   - **Localização**: Card com link direto para o Google Maps e preview das coordenadas.
-  - **Contatos (vCard)**: Card com nome, telefone e botão para iniciar conversa ou salvar contato.
+  - **Contatos (vCard)**: Card com nome, telefone brasileiro formatado, botão para iniciar conversa direta e copiar telefone.
   - **Reações**: Exibição sutil de emojis de reação vinculados ao balão da mensagem.
-- [ ] **Ticks Visuais de Entrega e Leitura**:
-  - Indicadores de status no balão: 1 check cinza (Enviado), 2 checks cinzas (Entregue) e 2 checks azuis (Lido).
-- [ ] **Formatador de Telefone Brasileiro**:
-  - Exibição de telefones no padrão `(XX) 9XXXX-XXXX` nos cabeçalhos e listas de conversas.
+- [x] **Ticks Visuais de Entrega e Leitura**:
+  - Indicadores de status no balão em tempo real via socket: 1 check cinza (Enviado), 2 checks cinzas (Entregue) e 2 checks azuis (Lido).
+- [x] **Formatador de Telefone Brasileiro**:
+  - Exibição de telefones no padrão `(XX) 9XXXX-XXXX` nos cabeçalhos, listas de conversas, modal de nova conversa e balões.
 
 ---
 

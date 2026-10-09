@@ -190,6 +190,16 @@ export const bindSessionStore = (sock: WASocket, sessionId: string, io: Server |
                     data: { status: status as any }
                 });
 
+                // Emit real-time status update to connected chat clients
+                const io = (global as any).io;
+                if (io) {
+                    io.to(sessionId).emit("message.update", [{
+                        keyId,
+                        remoteJid: update.key?.remoteJid,
+                        status
+                    }]);
+                }
+
                 // Dispatch webhook for message status update
                 dispatchWebhook(sessionId, "message.status", {
                     keyId,
@@ -441,10 +451,15 @@ async function processAndSaveMessage(
         messageType = "STICKER";
     } else if (messageContent?.locationMessage) {
         messageType = "LOCATION";
-        text = `${messageContent.locationMessage.degreesLatitude},${messageContent.locationMessage.degreesLongitude}`;
+        const loc = messageContent.locationMessage;
+        text = loc.name ? `${loc.degreesLatitude},${loc.degreesLongitude}\n${loc.name}` : `${loc.degreesLatitude},${loc.degreesLongitude}`;
     } else if (messageContent?.contactMessage) {
         messageType = "CONTACT";
-        text = messageContent.contactMessage.displayName || "";
+        text = messageContent.contactMessage.vcard || messageContent.contactMessage.displayName || "";
+    } else if (messageContent?.contactsArrayMessage?.contacts?.[0]) {
+        messageType = "CONTACT";
+        const firstContact = messageContent.contactsArrayMessage.contacts[0];
+        text = firstContact.vcard || firstContact.displayName || "";
     }
 
     // Determine effective participant for groups

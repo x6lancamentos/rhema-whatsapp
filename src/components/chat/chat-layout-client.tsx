@@ -44,7 +44,9 @@ export function ChatLayoutClient({ sessionId, initialJid }: ChatLayoutClientProp
             if (path.startsWith("/dashboard/chat/")) {
                 const rawJid = path.replace("/dashboard/chat/", "");
                 let clean = rawJid.replace(/\D/g, "");
-                if (clean.startsWith("0")) clean = "62" + clean.substring(1);
+                if ((clean.length === 10 || clean.length === 11) && !clean.startsWith("55")) {
+                    clean = "55" + clean;
+                }
                 setSelectedChat({ jid: `${clean}@s.whatsapp.net` });
             } else {
                 setSelectedChat(null);
@@ -90,6 +92,7 @@ export function ChatLayoutClient({ sessionId, initialJid }: ChatLayoutClientProp
                         jid={selectedChat.jid}
                         name={selectedChat.name}
                         onBack={handleBack}
+                        onSelectChat={handleSelectChat}
                     />
                 ) : (
                     <div className="flex-1 flex items-center justify-center min-w-0 min-h-0">
@@ -97,8 +100,11 @@ export function ChatLayoutClient({ sessionId, initialJid }: ChatLayoutClientProp
                             <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-4">
                                 <MessageCircle className="h-8 w-8 text-muted-foreground/40" />
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                                Select a chat to start messaging
+                            <p className="text-sm font-medium text-foreground">
+                                Nenhuma conversa selecionada
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Selecione um contato na lista ao lado para iniciar o atendimento
                             </p>
                         </div>
                     </div>

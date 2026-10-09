@@ -15,6 +15,8 @@ import { getChatsStatus } from "@/app/dashboard/chat/actions";
 import { useSocket } from "./socket-context";
 import { toast } from "sonner";
 
+import { formatPhone } from "@/lib/phone-formatter";
+
 interface ChatContact {
     jid: string;
     name: string | null;
@@ -42,16 +44,38 @@ interface ChatListProps {
 const PAGE_SIZE = parseInt(process.env.NEXT_PUBLIC_CHAT_PAGE_SIZE || "50", 10);
 
 function getDisplayName(chat: ChatContact): string {
-    return chat.name || chat.notify || chat.jid.split('@')[0];
+    if (chat.name && chat.name.trim().length > 0 && !chat.name.match(/^\+?\d{8,}$/)) {
+        return chat.name.trim();
+    }
+    if (chat.notify && chat.notify.trim().length > 0 && !chat.notify.match(/^\+?\d{8,}$/)) {
+        return chat.notify.trim();
+    }
+    return formatPhone(chat.jid);
 }
 
 function getMessagePreview(chat: ChatContact): string {
-    if (!chat.lastMessage?.content) return "No messages yet";
-    const content = chat.lastMessage.content;
-    if (chat.lastMessage.type !== "TEXT") {
-        return `📎 ${chat.lastMessage.type.charAt(0) + chat.lastMessage.type.slice(1).toLowerCase()}`;
+    if (!chat.lastMessage?.content && !chat.lastMessage?.type) return "Nenhuma mensagem";
+    const type = (chat.lastMessage?.type || "TEXT").toUpperCase();
+    const content = chat.lastMessage?.content || "";
+
+    switch (type) {
+        case "AUDIO":
+            return "🎤 Mensagem de voz";
+        case "IMAGE":
+            return content ? `📷 ${content}` : "📷 Foto";
+        case "VIDEO":
+            return content ? `🎥 ${content}` : "🎥 Vídeo";
+        case "STICKER":
+            return "💟 Figurinha";
+        case "LOCATION":
+            return "📍 Localização";
+        case "CONTACT":
+            return `👤 Contato: ${content || "Compartilhado"}`;
+        case "DOCUMENT":
+            return `📄 ${content || "Documento"}`;
+        default:
+            return content.length > 40 ? content.slice(0, 40) + "…" : content;
     }
-    return content.length > 40 ? content.slice(0, 40) + "…" : content;
 }
 
 function getTimeLabel(timestamp: string): string {
@@ -59,9 +83,9 @@ function getTimeLabel(timestamp: string): string {
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
     if (diffDays === 0) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'short' });
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    if (diffDays === 1) return "Ontem";
+    if (diffDays < 7) return date.toLocaleDateString("pt-BR", { weekday: 'short' });
+    return date.toLocaleDateString("pt-BR", { day: '2-digit', month: '2-digit' });
 }
 
 // ─── Label Assignment Popover ──────
@@ -395,7 +419,10 @@ export function ChatList({ sessionId, onSelectChat, selectedJid }: ChatListProps
     const handleStartNewChat = () => {
         if (!newChatNumber) return;
         let clean = newChatNumber.replace(/\D/g, '');
-        if (clean.startsWith('0')) clean = '62' + clean.substring(1);
+        // Se for DDD + Telefone brasileiro (10 ou 11 dígitos), adiciona DDI 55
+        if ((clean.length === 10 || clean.length === 11) && !clean.startsWith("55")) {
+            clean = "55" + clean;
+        }
         onSelectChat(`${clean}@s.whatsapp.net`);
         setIsNewChatOpen(false);
         setNewChatNumber("");
@@ -418,10 +445,11 @@ export function ChatList({ sessionId, onSelectChat, selectedJid }: ChatListProps
             <div className="shrink-0 px-3 pt-3 pb-2 space-y-2 border-b border-border/10">
                 <div className="flex justify-between items-center">
                     <h3 className="font-semibold text-base text-foreground">
-                        Chats
+                        Conversas
                         {chats.length > 0 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">({chats.length})</span>}
                     </h3>
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg"
+                        title="Nova conversa"
                         onClick={() => setIsNewChatOpen(!isNewChatOpen)}>
                         {isNewChatOpen ? <X className="h-4 w-4" /> : <MessageSquarePlus className="h-4 w-4" />}
                     </Button>
@@ -429,20 +457,20 @@ export function ChatList({ sessionId, onSelectChat, selectedJid }: ChatListProps
 
                 <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input placeholder="Search chats..." value={searchInput}
+                    <Input placeholder="Buscar conversas..." value={searchInput}
                         onChange={(e) => handleSearchChange(e.target.value)}
                         className="h-8 pl-8 text-sm bg-muted/50 border-0 rounded-lg focus-visible:ring-1" />
                 </div>
 
                 {isNewChatOpen && (
                     <div className="p-2.5 bg-muted/30 rounded-lg space-y-2 border border-border/40">
-                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Phone Number</Label>
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Número de WhatsApp (com DDD)</Label>
                         <div className="flex gap-1.5">
-                            <Input placeholder="628123456789" value={newChatNumber}
+                            <Input placeholder="(13) 98100-1766 ou 5513..." value={newChatNumber}
                                 onChange={(e) => setNewChatNumber(e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && handleStartNewChat()}
                                 className="h-8 text-sm" />
-                            <Button size="sm" className="h-8 px-3" onClick={handleStartNewChat}>Go</Button>
+                            <Button size="sm" className="h-8 px-3 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleStartNewChat}>Abrir</Button>
                         </div>
                     </div>
                 )}
