@@ -366,10 +366,14 @@ model SessionAccess {
 model BroadcastLog {
   id          String              @id @default(cuid())
   sessionId   String              // WA session ID string
+  name        String?             // Nome da campanha
+  listName    String?             // Nome da lista utilizada
+  templateName String?            // Nome do modelo/template utilizado
   message     String              @db.Text
   total       Int
   sent        Int                 @default(0)
   failed      Int                 @default(0)
+  responded   Int                 @default(0)         // Quantidade de destinatários que responderam
   status      String              @default("running") // running, completed, cancelled, paused
   delay       Int                 @default(2000)      // legacy delay
   minDelay    Int                 @default(2000)      // ms min delay
@@ -402,9 +406,12 @@ model BroadcastRecipient {
   name            String?
   resolvedMessage String?      @db.Text
   variables       Json?
-  status          String       @default("pending") // pending, sent, failed
+  status          String       @default("pending") // pending, sent, failed, responded
   error           String?      @db.Text
   sentAt          DateTime?
+  respondedAt     DateTime?
+  responseMessage String?      @db.Text
+  sessionIdUsed   String?      // Qual chip/sessão enviou para este lead (Multi-Chip)
   imoviewAtendimentoId String?
   imoviewClienteId     String?
   imoviewCorretor      String?
@@ -413,6 +420,8 @@ model BroadcastRecipient {
 
   @@index([broadcastLogId])
   @@index([imoviewAtendimentoId])
+  @@index([jid])
+  @@index([status])
 }
 
 // Reusable message templates

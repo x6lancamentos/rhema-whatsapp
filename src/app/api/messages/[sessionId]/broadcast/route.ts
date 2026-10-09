@@ -18,6 +18,9 @@ const recipientItemSchema = z.union([
 
 const broadcastBodySchema = z
   .object({
+    name: z.string().optional().nullable(),
+    listName: z.string().optional().nullable(),
+    templateName: z.string().optional().nullable(),
     recipients: z.array(recipientItemSchema).min(1, "Pelo menos um destinatário é necessário"),
     message: z.string().optional().default(""),
     delay: z.number().optional(), // legacy delay ms
@@ -66,6 +69,9 @@ export async function POST(
     }
 
     const {
+      name,
+      listName,
+      templateName,
       recipients: rawRecipients,
       message,
       delay,
@@ -206,6 +212,9 @@ export async function POST(
     const log = await prisma.broadcastLog.create({
       data: {
         sessionId,
+        name: name || null,
+        listName: listName || null,
+        templateName: templateName || null,
         message: message || "",
         total: filteredRecipients.length,
         delay: minDelay,
@@ -225,12 +234,22 @@ export async function POST(
         endHour,
         status: isScheduled ? "scheduled" : "running",
         recipients: {
-          create: filteredRecipients.map((r) => ({
-            jid: r.jid,
-            name: r.name || null,
-            variables: r.variables ? JSON.parse(JSON.stringify(r.variables)) : null,
-            status: "pending",
-          })),
+          create: filteredRecipients.map((r) => {
+            const vars = r.variables || {};
+            const imoviewAtendimentoId = vars.atendimentoId || vars.codigo_atendimento || null;
+            const imoviewClienteId = vars.clienteId || vars.codigo_cliente || null;
+            const imoviewCorretor = vars.corretor || null;
+
+            return {
+              jid: r.jid,
+              name: r.name || null,
+              variables: r.variables ? JSON.parse(JSON.stringify(r.variables)) : null,
+              status: "pending",
+              imoviewAtendimentoId: imoviewAtendimentoId ? String(imoviewAtendimentoId) : null,
+              imoviewClienteId: imoviewClienteId ? String(imoviewClienteId) : null,
+              imoviewCorretor: imoviewCorretor ? String(imoviewCorretor) : null,
+            };
+          }),
         },
       },
     });

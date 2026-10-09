@@ -626,27 +626,74 @@ async function processAndSaveMessage(
                 }
             }
 
-            // Automatic Imoview lead reply recording
+            // Auditoria de Respostas de Broadcast & Registro automático no CRM Imoview
             if (!fromMe && triggerWebhook && text && !remoteJid.includes('@g.us')) {
                 try {
+                    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
                     const recentRecipient = await prisma.broadcastRecipient.findFirst({
                         where: {
                             jid: finalRemoteJid,
-                            imoviewAtendimentoId: { not: null },
+                            status: { in: ["sent", "pending"] },
+                            sentAt: { gte: fourteenDaysAgo },
                         },
                         orderBy: { sentAt: "desc" },
-                        select: { imoviewAtendimentoId: true, name: true }
+                        select: {
+                            id: true,
+                            broadcastLogId: true,
+                            imoviewAtendimentoId: true,
+                            name: true,
+                            status: true,
+                        }
                     });
 
-                    if (recentRecipient?.imoviewAtendimentoId) {
-                        const { recordImoviewInteraction } = await import("@/lib/imoview");
-                        recordImoviewInteraction(
-                            recentRecipient.imoviewAtendimentoId,
-                            `💬 Lead respondeu ao WhatsApp Auto: "${text.trim().substring(0, 150)}"`
-                        ).catch(err => logger.error("Imoview", "Error logging reply to CRM", err));
+                    if (recentRecipient) {
+                        // Atualiza status do lead no disparo para 'responded'
+                        await prisma.broadcastRecipient.update({
+                            where: { id: recentRecipient.id },
+                            data: {
+                                status: "responded",
+                                respondedAt: new Date(),
+                                responseMessage: text.trim().substring(0, 500),
+                            },
+                        });
+
+                        // Incrementa métrica de resposta na campanha
+                        await prisma.broadcastLog.update({
+                            where: { id: recentRecipient.broadcastLogId },
+                            data: {
+                                responded: { increment: 1 },
+                            },
+                        });
+
+                        // Registra interação no CRM Imoview se estiver vinculado
+                        if (recentRecipient.imoviewAtendimentoId) {
+                            const { recordImoviewInteraction } = await import("@/lib/imoview");
+                            recordImoviewInteraction(
+                                recentRecipient.imoviewAtendimentoId,
+                                `💬 Lead respondeu ao WhatsApp Auto: "${text.trim().substring(0, 150)}"`
+                            ).catch(err => logger.error("Imoview", "Error logging reply to CRM", err));
+                        }
+                    } else {
+                        // Caso não tenha encontrado por broadcast recente, verificar se há atendimento Imoview genérico
+                        const imoviewLead = await prisma.broadcastRecipient.findFirst({
+                            where: {
+                                jid: finalRemoteJid,
+                                imoviewAtendimentoId: { not: null },
+                            },
+                            orderBy: { sentAt: "desc" },
+                            select: { imoviewAtendimentoId: true }
+                        });
+
+                        if (imoviewLead?.imoviewAtendimentoId) {
+                            const { recordImoviewInteraction } = await import("@/lib/imoview");
+                            recordImoviewInteraction(
+                                imoviewLead.imoviewAtendimentoId,
+                                `💬 Lead respondeu ao WhatsApp Auto: "${text.trim().substring(0, 150)}"`
+                            ).catch(err => logger.error("Imoview", "Error logging reply to CRM", err));
+                        }
                     }
-                } catch (imoviewReplyErr) {
-                    logger.error("Store", "Error checking Imoview reply", imoviewReplyErr);
+                } catch (replyAuditErr) {
+                    logger.error("Store", "Error auditing broadcast reply", replyAuditErr);
                 }
             }
         }

@@ -43,13 +43,13 @@ O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendim
 
 - [x] **Visualização e Edição Rápida da Lista**: Modal para conferir, editar números/nomes e excluir destinatários antes de disparar.
 - [x] **Gestão de Listas Salvas**: Edição inline de listas salvas com sincronização no banco de dados.
-- [ ] **Distribuição de Carga Multi-Sessão (Multi-Chip / Round-Robin)**:
+- [x] **Distribuição de Carga Multi-Sessão (Multi-Chip / Round-Robin)**:
   - Selecionar múltiplas contas conectadas no momento do disparo.
   - Distribuição automática e equilibrada da fila entre as sessões para reduzir drasticamente o risco de bloqueio pelo WhatsApp.
-- [ ] **Auditoria & Histórico Completo de Broadcasts**:
+- [x] **Auditoria & Histórico Completo de Broadcasts**:
   - Tabela `BroadcastLog` no banco com registro de data, hora, lista, sessão utilizada, template e status por lead (Enviado, Falha, Respondeu).
   - Dashboard de métricas de conversão e entrega das campanhas.
-- [ ] **Pausa e Retomada de Campanhas**: Botão para pausar um disparo em andamento e retomar posteriormente.
+- [x] **Pausa e Retomada de Campanhas**: Botão para pausar um disparo em andamento e retomar posteriormente.
 
 ---
 

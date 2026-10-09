@@ -292,6 +292,7 @@ export async function executeBroadcast(broadcastId: string): Promise<void> {
             status: "sent",
             sentAt: new Date(),
             resolvedMessage: personalizedText,
+            sessionIdUsed: activeSessionId,
           },
         });
 
@@ -320,6 +321,7 @@ export async function executeBroadcast(broadcastId: string): Promise<void> {
             status: "failed",
             error: errorMsg,
             resolvedMessage: personalizedText || null,
+            sessionIdUsed: activeSessionId,
           },
         });
       }

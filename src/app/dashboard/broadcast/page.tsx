@@ -82,10 +82,14 @@ interface BroadcastProgress {
 interface BroadcastLog {
   id: string;
   sessionId: string;
+  name?: string | null;
+  listName?: string | null;
+  templateName?: string | null;
   message: string;
   total: number;
   sent: number;
   failed: number;
+  responded?: number;
   status: string;
   delay: number;
   minDelay?: number;
@@ -124,6 +128,19 @@ interface BroadcastRecipient {
   status: string;
   error?: string | null;
   sentAt?: string | null;
+  respondedAt?: string | null;
+  responseMessage?: string | null;
+  sessionIdUsed?: string | null;
+}
+
+interface HistoryMetrics {
+  totalCampaigns: number;
+  totalSent: number;
+  totalFailed: number;
+  totalResponded: number;
+  totalTargeted: number;
+  successRate: number;
+  responseRate: number;
 }
 
 interface LabelOption {
@@ -236,12 +253,18 @@ export default function BroadcastPage() {
   const [newSavedListContactPhone, setNewSavedListContactPhone] = useState("");
   const [savingListChanges, setSavingListChanges] = useState(false);
 
-  // History Tab
+  // Campaign Name
+  const [campaignName, setCampaignName] = useState("");
+
+  // History Tab & Metrics
   const [history, setHistory] = useState<BroadcastLog[]>([]);
+  const [historyMetrics, setHistoryMetrics] = useState<HistoryMetrics | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedLog, setSelectedLog] = useState<BroadcastLog | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailStatusFilter, setDetailStatusFilter] = useState<string>("all");
+  const [detailSearch, setDetailSearch] = useState("");
 
   // Blacklist Tab
   const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
@@ -339,6 +362,9 @@ export default function BroadcastPage() {
       if (res.ok) {
         const json = await res.json();
         setHistory(json.data || []);
+        if (json.metrics) {
+          setHistoryMetrics(json.metrics);
+        }
       }
     } catch (e) {
       console.error("Failed to fetch broadcast history", e);
@@ -1101,6 +1127,9 @@ export default function BroadcastPage() {
       const chipSessions = selectedSessionIds.length > 0 ? selectedSessionIds : [sessionId];
 
       const payload = {
+        name: campaignName.trim() || undefined,
+        listName: fileStats?.name || (selectedListId ? savedLists.find((l) => l.id === selectedListId)?.name : null) || undefined,
+        templateName: templateName || undefined,
         recipients: contactsList.map((c) => ({
           phone: c.phone,
           jid: c.jid,
@@ -1157,11 +1186,12 @@ export default function BroadcastPage() {
   };
 
   // 12. Control Broadcast (Pause / Resume / Cancel)
-  const handleControlBroadcast = async (action: "pause" | "resume" | "cancel") => {
-    if (!broadcastProgress?.broadcastId || !sessionId) return;
+  const handleControlBroadcast = async (action: "pause" | "resume" | "cancel", targetBroadcastId?: string) => {
+    const idToControl = targetBroadcastId || broadcastProgress?.broadcastId;
+    if (!idToControl || !sessionId) return;
     try {
       const res = await fetch(
-        `/api/messages/${sessionId}/broadcast/${broadcastProgress.broadcastId}/control`,
+        `/api/messages/${sessionId}/broadcast/${idToControl}/control`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1170,6 +1200,28 @@ export default function BroadcastPage() {
       );
       if (res.ok) {
         toast.success(`Disparo ${action === "pause" ? "pausado" : action === "resume" ? "retomado" : "cancelado"}`);
+        // Atualiza estado local no histórico
+        setHistory((prev) =>
+          prev.map((item) =>
+            item.id === idToControl
+              ? { ...item, status: action === "pause" ? "paused" : action === "resume" ? "running" : "cancelled" }
+              : item
+          )
+        );
+        if (selectedLog && selectedLog.id === idToControl) {
+          setSelectedLog((prev) =>
+            prev ? { ...prev, status: action === "pause" ? "paused" : action === "resume" ? "running" : "cancelled" } : null
+          );
+        }
+        if (broadcastProgress?.broadcastId === idToControl) {
+          setBroadcastProgress((prev) =>
+            prev ? { ...prev, status: action === "pause" ? "paused" : action === "resume" ? "running" : "cancelled" } : null
+          );
+        }
+        fetchHistory();
+      } else {
+        const data = await res.json();
+        toast.error(data.message || "Erro ao controlar disparo");
       }
     } catch (e: any) {
       toast.error("Falha ao enviar comando de controle");
@@ -1185,17 +1237,27 @@ export default function BroadcastPage() {
     const data = log.recipients.map((r) => ({
       Telefone: r.jid.replace("@s.whatsapp.net", ""),
       Nome: r.name || "",
-      Status: r.status === "sent" ? "Enviado" : r.status === "failed" ? "Falhou" : "Pendente",
+      ChipUtilizado: r.sessionIdUsed || log.sessionId,
+      Status:
+        r.status === "responded"
+          ? "Respondeu"
+          : r.status === "sent"
+          ? "Enviado"
+          : r.status === "failed"
+          ? "Falhou"
+          : "Pendente",
+      DataResposta: r.respondedAt ? new Date(r.respondedAt).toLocaleString("pt-BR") : "",
+      MensagemResposta: r.responseMessage || "",
       Erro: r.error || "",
       DataEnvio: r.sentAt ? new Date(r.sentAt).toLocaleString("pt-BR") : "",
-      MensagemPersonalizada: r.resolvedMessage || "",
+      MensagemPersonalizada: r.resolvedMessage || log.message || "",
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Relatorio_Disparo");
-    XLSX.writeFile(workbook, `relatorio_disparo_${log.id.slice(0, 8)}.xlsx`);
-    toast.success("Relatório Excel baixado!");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Relatorio_Auditoria");
+    XLSX.writeFile(workbook, `auditoria_disparo_${log.name ? log.name.replace(/\s+/g, "_") : log.id.slice(0, 8)}.xlsx`);
+    toast.success("Relatório de auditoria Excel baixado com sucesso!");
   };
 
   // 14. Retry Failed Recipients
@@ -1320,6 +1382,27 @@ export default function BroadcastPage() {
         {/* ========================================================================= */}
         {activeTab === "new" && (
           <div className="space-y-6">
+            {/* Identificação da Campanha */}
+            <Card className="border-border/60 shadow-xs bg-muted/20">
+              <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 flex-1">
+                  <Tag className="h-4 w-4 text-primary shrink-0" />
+                  <div className="flex-1 max-w-lg">
+                    <Input
+                      placeholder="Nome / Identificador da Campanha (opcional, ex: Resgate Leads Frios Outubro)"
+                      value={campaignName}
+                      onChange={(e) => setCampaignName(e.target.value)}
+                      className="h-8 text-xs font-medium bg-background"
+                    />
+                  </div>
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 shrink-0">
+                  <Info className="h-3.5 w-3.5 text-blue-500" />
+                  Facilita a auditoria e análise de métricas no Histórico.
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
               {/* COLUNA ESQUERDA: DESTINATÁRIOS (5 COLUNAS) */}
               <div className="lg:col-span-5 space-y-4">
@@ -1898,19 +1981,56 @@ export default function BroadcastPage() {
                   </CardContent>
                 </Card>
 
-                {/* Card de Rotação Multi-Chip (se houver mais de uma sessão disponível) */}
-                {sessions && sessions.length > 1 && (
-                  <Card className="border-border/60 shadow-sm">
-                    <CardHeader className="py-3 px-5 bg-muted/20 border-b border-border/40">
-                      <CardTitle className="text-sm font-bold flex items-center gap-2">
-                        <Smartphone className="h-4 w-4 text-blue-500" />
-                        Multi-Chip: Rotação e Balanceamento de Disparos
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Distribua os envios entre múltiplos chips de WhatsApp para reduzir o risco de bloqueio e acelerar o disparo.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pt-4 space-y-3">
+                {/* Card de Rotação Multi-Chip (Multi-Sessão / Round-Robin) */}
+                <Card className="border-border/60 shadow-sm">
+                  <CardHeader className="py-3 px-5 bg-muted/20 border-b border-border/40">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                          <Smartphone className="h-4 w-4 text-blue-500" />
+                          Distribuição de Carga Multi-Sessão (Multi-Chip / Round-Robin)
+                        </CardTitle>
+                        <CardDescription className="text-xs mt-0.5">
+                          Distribua automaticamente a fila entre múltiplas contas para reduzir drasticamente o risco de bloqueio pelo WhatsApp.
+                        </CardDescription>
+                      </div>
+
+                      {sessions && sessions.length > 1 && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs px-2.5"
+                            onClick={() => {
+                              const connectedIds = sessions
+                                .filter((s) => s.status?.toLowerCase() === "connected")
+                                .map((s) => s.sessionId);
+                              setSelectedSessionIds(connectedIds.length > 0 ? connectedIds : [sessionId]);
+                              toast.success(`${connectedIds.length} contas conectadas selecionadas para o disparo!`);
+                            }}
+                          >
+                            Selecionar Todas Conectadas
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs px-2"
+                            onClick={() => {
+                              setSelectedSessionIds([sessionId]);
+                              toast.info("Apenas a sessão atual selecionada.");
+                            }}
+                          >
+                            Apenas Atual
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="pt-4 space-y-3">
+                    {sessions && sessions.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {sessions.map((s) => {
                           const isConnected = s.status?.toLowerCase() === "connected";
@@ -1923,7 +2043,10 @@ export default function BroadcastPage() {
                             <div
                               key={s.sessionId}
                               onClick={() => {
-                                if (!isConnected) return;
+                                if (!isConnected) {
+                                  toast.error("Esta sessão está desconectada do WhatsApp.");
+                                  return;
+                                }
                                 setSelectedSessionIds((prev) => {
                                   const currentList = prev.length === 0 ? [sessionId] : prev;
                                   if (currentList.includes(s.sessionId)) {
@@ -1934,36 +2057,80 @@ export default function BroadcastPage() {
                                   }
                                 });
                               }}
-                              className={`p-2.5 rounded-lg border flex items-center justify-between cursor-pointer transition-colors ${
+                              className={`p-2.5 rounded-lg border flex items-center justify-between cursor-pointer transition-all ${
                                 !isConnected
                                   ? "opacity-50 cursor-not-allowed bg-muted/20 border-border/40"
                                   : isSelected
-                                  ? "bg-primary/10 border-primary/40 text-foreground"
+                                  ? "bg-primary/10 border-primary shadow-xs text-foreground ring-1 ring-primary/30"
                                   : "hover:bg-muted/40 border-border/60"
                               }`}
                             >
-                              <div className="flex items-center gap-2 min-w-0">
+                              <div className="flex items-center gap-2.5 min-w-0">
                                 <span
-                                  className={`w-2 h-2 rounded-full ${
-                                    isConnected ? "bg-emerald-500" : "bg-zinc-400"
+                                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                    isConnected ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
                                   }`}
                                 />
                                 <div className="truncate">
-                                  <div className="text-xs font-semibold truncate">{s.name || s.sessionId}</div>
-                                  <div className="text-[10px] text-muted-foreground">{s.sessionId}</div>
+                                  <div className="text-xs font-semibold truncate flex items-center gap-1.5">
+                                    {s.name || s.sessionId}
+                                    {s.sessionId === sessionId && (
+                                      <span className="text-[10px] text-muted-foreground font-normal">(Atual)</span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground font-mono truncate">{s.sessionId}</div>
                                 </div>
                               </div>
-                              {isSelected && <Badge variant="default" className="text-[10px] h-5">Ativo</Badge>}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isConnected ? (
+                                  isSelected ? (
+                                    <Badge variant="default" className="text-[10px] h-5 bg-emerald-600">
+                                      Ativo na Fila
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">
+                                      Disponível
+                                    </Badge>
+                                  )
+                                ) : (
+                                  <Badge variant="secondary" className="text-[10px] h-5 opacity-60">
+                                    Desconectado
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
                       </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        🔄 As mensagens serão alternadas (round-robin) proporcionalmente entre todos os chips ativos selecionados.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Nenhuma sessão encontrada.</p>
+                    )}
+
+                    {/* Status e Explicação do Balanceamento */}
+                    {(() => {
+                      const activeChipsCount = selectedSessionIds.length === 0 ? 1 : selectedSessionIds.length;
+                      if (activeChipsCount > 1) {
+                        return (
+                          <div className="p-2.5 bg-blue-50/60 dark:bg-blue-950/20 border border-blue-500/20 rounded-lg text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+                            <Sparkles className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
+                            <div>
+                              <strong className="font-semibold">Modo Multi-Chip Ativo ({activeChipsCount} contas selecionadas):</strong>
+                              <p className="text-[11px] mt-0.5 opacity-90 leading-relaxed">
+                                A fila é alternada de forma equilibrada em Round-Robin (Chip 1 ➔ Chip 2 ➔ Chip 3...). Cada lead receberá a mensagem de um número diferente, dividindo a carga e blindando sua operação contra bloqueios. Se qualquer conta desconectar durante o disparo, o motor continua automaticamente com as contas ativas restantes.
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                          <Smartphone className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span>Envio configurado com 1 conta. Conecte contas adicionais em Sessões para ativar a rotação balanceada automática.</span>
+                        </p>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
 
                 {/* Card de Configurações Anti-Ban, Horário e Agendamento */}
                 <Card className="border-border/60 shadow-sm">
@@ -2485,17 +2652,84 @@ export default function BroadcastPage() {
         {/* TAB 4: HISTÓRICO DE DISPAROS & RELATÓRIOS */}
         {/* ========================================================================= */}
         {activeTab === "history" && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-bold">Histórico de Disparos</h3>
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <History className="h-5 w-5 text-emerald-500" />
+                  Auditoria & Histórico Completo de Broadcasts
+                </h3>
                 <p className="text-xs text-muted-foreground">
-                  Acompanhe taxas de entrega, erros e baixe relatórios em Excel.
+                  Métricas de conversão, entrega, respostas de leads e controle de pausa/retomada de campanhas.
                 </p>
               </div>
               <Button variant="outline" size="sm" onClick={fetchHistory} disabled={historyLoading}>
                 <RefreshCw className={`h-4 w-4 mr-1 ${historyLoading ? "animate-spin" : ""}`} /> Atualizar
               </Button>
+            </div>
+
+            {/* Dashboard de Métricas de Conversão & Entrega */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Card className="border-border/60 p-3.5 shadow-xs">
+                <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                  <span>Total de Campanhas</span>
+                  <History className="h-4 w-4 text-primary" />
+                </div>
+                <div className="text-xl sm:text-2xl font-bold font-mono mt-1 text-foreground">
+                  {historyMetrics?.totalCampaigns ?? history.length}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Campanhas registradas no banco</p>
+              </Card>
+
+              <Card className="border-border/60 p-3.5 shadow-xs">
+                <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                  <span>Mensagens Enviadas</span>
+                  <Send className="h-4 w-4 text-emerald-500" />
+                </div>
+                <div className="text-xl sm:text-2xl font-bold font-mono mt-1 text-emerald-600">
+                  {historyMetrics?.totalSent ?? history.reduce((acc, l) => acc + l.sent, 0)}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Entregues com sucesso</p>
+              </Card>
+
+              <Card className="border-border/60 p-3.5 shadow-xs">
+                <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                  <span>Taxa de Entrega</span>
+                  <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                </div>
+                <div className="text-xl sm:text-2xl font-bold font-mono mt-1 text-blue-600">
+                  {(() => {
+                    if (historyMetrics) return `${historyMetrics.successRate}%`;
+                    const s = history.reduce((acc, l) => acc + l.sent, 0);
+                    const f = history.reduce((acc, l) => acc + l.failed, 0);
+                    return s + f > 0 ? `${Math.round((s / (s + f)) * 100)}%` : "100%";
+                  })()}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {historyMetrics?.totalFailed ?? history.reduce((acc, l) => acc + l.failed, 0)} falhas registradas
+                </p>
+              </Card>
+
+              <Card className="border-border/60 p-3.5 shadow-xs bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-500/20">
+                <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
+                  <span>Taxa de Resposta</span>
+                  <Sparkles className="h-4 w-4 text-emerald-500" />
+                </div>
+                <div className="text-xl sm:text-2xl font-bold font-mono mt-1 text-emerald-600 dark:text-emerald-400 flex items-baseline gap-2">
+                  <span>
+                    {(() => {
+                      if (historyMetrics) return `${historyMetrics.responseRate}%`;
+                      const s = history.reduce((acc, l) => acc + l.sent, 0);
+                      const r = history.reduce((acc, l) => acc + (l.responded || 0), 0);
+                      return s > 0 ? `${Math.round((r / s) * 100)}%` : "0%";
+                    })()}
+                  </span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    ({historyMetrics?.totalResponded ?? history.reduce((acc, l) => acc + (l.responded || 0), 0)} respostas)
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Leads que responderam via WhatsApp</p>
+              </Card>
             </div>
 
             {history.length === 0 ? (
@@ -2505,118 +2739,211 @@ export default function BroadcastPage() {
               </Card>
             ) : (
               <div className="space-y-3">
-                {history.map((log) => (
-                  <Card key={log.id} className="border-border/60 hover:border-primary/40 transition-colors">
-                    <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-sm text-foreground">
-                            Disparo #{log.id.slice(0, 8)}
-                          </span>
-                          <Badge
-                            variant={
-                              log.status === "completed"
-                                ? "default"
-                                : log.status === "cancelled"
-                                ? "destructive"
-                                : log.status === "scheduled"
-                                ? "outline"
-                                : "secondary"
-                            }
-                            className={`text-[10px] font-semibold uppercase ${
-                              log.status === "scheduled"
-                                ? "border-blue-500/40 text-blue-600 bg-blue-500/10"
-                                : ""
-                            }`}
-                          >
-                            {log.status === "completed"
-                              ? "Concluído"
-                              : log.status === "cancelled"
-                              ? "Cancelado"
-                              : log.status === "scheduled"
-                              ? "Agendado"
-                              : "Em Andamento"}
-                          </Badge>
+                {history.map((log) => {
+                  const hasMultiChip = Array.isArray(log.sessionIds) && log.sessionIds.length > 1;
+                  const isRunning = log.status === "running";
+                  const isPaused = log.status === "paused";
+                  const isScheduled = log.status === "scheduled";
 
-                          {log.isPtt && (
-                            <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30 bg-emerald-50/10">
-                              Áudio PTT 🎙️
-                            </Badge>
-                          )}
-                          {log.mediaUrl && (
-                            <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-500/30 bg-blue-50/10">
-                              Mídia 📎
-                            </Badge>
-                          )}
-
-                          <span className="text-[11px] text-muted-foreground">
-                            {new Date(log.startedAt).toLocaleString("pt-BR")}
-                          </span>
-
-                          {log.scheduledAt && (
-                            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
-                              <CalendarClock className="h-3.5 w-3.5" />
-                              Programado para: {new Date(log.scheduledAt).toLocaleString("pt-BR")}
+                  return (
+                    <Card
+                      key={log.id}
+                      className={`border-border/60 hover:border-primary/40 transition-colors ${
+                        isRunning ? "ring-1 ring-blue-500/30 bg-blue-50/5" : isPaused ? "ring-1 ring-amber-500/30 bg-amber-50/5" : ""
+                      }`}
+                    >
+                      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-foreground">
+                              {log.name ? log.name : `Disparo #${log.id.slice(0, 8)}`}
                             </span>
+                            {log.name && (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                #{log.id.slice(0, 8)}
+                              </span>
+                            )}
+
+                            <Badge
+                              variant={
+                                log.status === "completed"
+                                  ? "default"
+                                  : log.status === "cancelled"
+                                  ? "destructive"
+                                  : isScheduled
+                                  ? "outline"
+                                  : isPaused
+                                  ? "secondary"
+                                  : "default"
+                              }
+                              className={`text-[10px] font-semibold uppercase ${
+                                isScheduled
+                                  ? "border-blue-500/40 text-blue-600 bg-blue-500/10"
+                                  : isPaused
+                                  ? "bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30"
+                                  : isRunning
+                                  ? "bg-blue-600 text-white animate-pulse"
+                                  : ""
+                              }`}
+                            >
+                              {log.status === "completed"
+                                ? "Concluído"
+                                : log.status === "cancelled"
+                                ? "Cancelado"
+                                : isScheduled
+                                ? "Agendado"
+                                : isPaused
+                                ? "Pausado"
+                                : "Em Andamento"}
+                            </Badge>
+
+                            {hasMultiChip && (
+                              <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-500/30 bg-blue-50/10 font-semibold">
+                                ⚡ Multi-Chip ({(log.sessionIds as string[]).length} contas)
+                              </Badge>
+                            )}
+
+                            {log.listName && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                📋 {log.listName}
+                              </Badge>
+                            )}
+
+                            {log.templateName && (
+                              <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/30">
+                                📑 {log.templateName}
+                              </Badge>
+                            )}
+
+                            {log.isPtt && (
+                              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30 bg-emerald-50/10">
+                                Áudio PTT 🎙️
+                              </Badge>
+                            )}
+                            {log.mediaUrl && (
+                              <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-500/30 bg-blue-50/10">
+                                Mídia 📎
+                              </Badge>
+                            )}
+
+                            <span className="text-[11px] text-muted-foreground">
+                              {new Date(log.startedAt).toLocaleString("pt-BR")}
+                            </span>
+
+                            {log.scheduledAt && (
+                              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
+                                <CalendarClock className="h-3.5 w-3.5" />
+                                Programado para: {new Date(log.scheduledAt).toLocaleString("pt-BR")}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-xs text-muted-foreground truncate max-w-xl font-mono">
+                            {log.message || (log.audioUrl ? "[Áudio Gravado PTT]" : "[Mídia sem texto]")}
+                          </p>
+
+                          <div className="flex gap-4 text-xs font-mono items-center flex-wrap">
+                            <span className="text-emerald-600 font-semibold">✓ {log.sent} enviados</span>
+                            {log.failed > 0 && <span className="text-red-500 font-semibold">✗ {log.failed} falhas</span>}
+                            <span className="text-muted-foreground">Total: {log.total}</span>
+                            {(log.responded ?? 0) > 0 && (
+                              <span className="text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/20">
+                                💬 {log.responded} responderam ({log.sent > 0 ? Math.round(((log.responded || 0) / log.sent) * 100) : 0}%)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Botões de Ação & Controle de Pausa/Retomada */}
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                          {isRunning && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+                                onClick={() => handleControlBroadcast("pause", log.id)}
+                                title="Pausar disparo em andamento"
+                              >
+                                <Pause className="h-3.5 w-3.5 mr-1" /> Pausar
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="h-8 text-xs"
+                                onClick={() => {
+                                  if (!confirm("Deseja interromper este disparo em andamento?")) return;
+                                  handleControlBroadcast("cancel", log.id);
+                                }}
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-1" /> Cancelar
+                              </Button>
+                            </>
                           )}
-                        </div>
 
-                        <p className="text-xs text-muted-foreground truncate max-w-xl font-mono">
-                          {log.message || (log.audioUrl ? "[Áudio Gravado PTT]" : "[Mídia sem texto]")}
-                        </p>
+                          {isPaused && (
+                            <>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                onClick={() => handleControlBroadcast("resume", log.id)}
+                                title="Retomar envio da fila restante"
+                              >
+                                <Play className="h-3.5 w-3.5 mr-1" /> Retomar
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="h-8 text-xs"
+                                onClick={() => {
+                                  if (!confirm("Deseja cancelar permanentemente este disparo pausado?")) return;
+                                  handleControlBroadcast("cancel", log.id);
+                                }}
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-1" /> Cancelar
+                              </Button>
+                            </>
+                          )}
 
-                        <div className="flex gap-4 text-xs font-mono">
-                          <span className="text-emerald-600 font-semibold">✓ {log.sent} enviados</span>
-                          {log.failed > 0 && <span className="text-red-500 font-semibold">✗ {log.failed} falhas</span>}
-                          <span className="text-muted-foreground">Total: {log.total}</span>
-                        </div>
-                      </div>
+                          {isScheduled && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={async () => {
+                                if (!confirm("Deseja realmente cancelar este disparo agendado?")) return;
+                                handleControlBroadcast("cancel", log.id);
+                              }}
+                            >
+                              <XCircle className="h-3.5 w-3.5 mr-1" /> Cancelar
+                            </Button>
+                          )}
 
-                      <div className="flex items-center gap-2">
-                        {log.status === "scheduled" && (
+                          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openDetail(log)}>
+                            <Eye className="h-3.5 w-3.5 mr-1" /> Auditoria
+                          </Button>
+
                           <Button
-                            variant="destructive"
-                            size="sm"
-                            className="h-8 text-xs"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-primary"
+                            title="Exportar Relatório Excel com Auditoria Completa"
                             onClick={async () => {
-                              if (!confirm("Deseja realmente cancelar este disparo agendado?")) return;
-                              await fetch(
-                                `/api/messages/${sessionId}/broadcast/${log.id}/control`,
-                                {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ action: "cancel" }),
-                                }
-                              );
-                              toast.success("Disparo agendado cancelado com sucesso!");
-                              fetchHistory();
+                              const res = await fetch(`/api/messages/${sessionId}/broadcast/history/${log.id}`);
+                              if (res.ok) {
+                                const d = await res.json();
+                                handleExportReport(d.data);
+                              }
                             }}
                           >
-                            <XCircle className="h-3.5 w-3.5 mr-1" /> Cancelar
+                            <Download className="h-4 w-4" />
                           </Button>
-                        )}
-                        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openDetail(log)}>
-                          <Eye className="h-3.5 w-3.5 mr-1" /> Ver Detalhes
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-primary"
-                          title="Exportar Relatório Excel"
-                          onClick={async () => {
-                            const res = await fetch(`/api/messages/${sessionId}/broadcast/history/${log.id}`);
-                            if (res.ok) {
-                              const d = await res.json();
-                              handleExportReport(d.data);
-                            }
-                          }}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2742,22 +3069,82 @@ export default function BroadcastPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* MODAL: DETALHES DO DISPARO / RELATÓRIO INDIVIDUAL */}
+        {/* MODAL: DETALHES DO DISPARO / RELATÓRIO INDIVIDUAL DE AUDITORIA */}
         {/* ========================================================================= */}
         <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-          <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-6">
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-6">
             <DialogHeader>
-              <div className="flex justify-between items-start pr-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pr-6">
                 <div>
-                  <DialogTitle className="text-lg font-bold">Relatório do Disparo #{selectedLog?.id.slice(0, 8)}</DialogTitle>
-                  <DialogDescription className="text-xs">
-                    Iniciado em {selectedLog?.startedAt ? new Date(selectedLog.startedAt).toLocaleString("pt-BR") : ""}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <DialogTitle className="text-lg font-bold">
+                      {selectedLog?.name ? selectedLog.name : `Auditoria de Disparo #${selectedLog?.id.slice(0, 8)}`}
+                    </DialogTitle>
+                    {selectedLog?.name && (
+                      <span className="text-xs text-muted-foreground font-mono">
+                        #{selectedLog.id.slice(0, 8)}
+                      </span>
+                    )}
+                    <Badge
+                      variant={
+                        selectedLog?.status === "completed"
+                          ? "default"
+                          : selectedLog?.status === "cancelled"
+                          ? "destructive"
+                          : selectedLog?.status === "paused"
+                          ? "secondary"
+                          : "default"
+                      }
+                      className="text-[10px] uppercase font-semibold"
+                    >
+                      {selectedLog?.status === "completed"
+                        ? "Concluído"
+                        : selectedLog?.status === "cancelled"
+                        ? "Cancelado"
+                        : selectedLog?.status === "paused"
+                        ? "Pausado"
+                        : selectedLog?.status === "scheduled"
+                        ? "Agendado"
+                        : "Em Andamento"}
+                    </Badge>
+                  </div>
+                  <DialogDescription className="text-xs mt-1 flex items-center gap-2 flex-wrap">
+                    <span>
+                      Iniciado em {selectedLog?.startedAt ? new Date(selectedLog.startedAt).toLocaleString("pt-BR") : ""}
+                    </span>
+                    {selectedLog?.listName && <span>• 📋 Lista: <strong>{selectedLog.listName}</strong></span>}
+                    {selectedLog?.templateName && <span>• 📑 Modelo: <strong>{selectedLog.templateName}</strong></span>}
+                    {Array.isArray(selectedLog?.sessionIds) && selectedLog.sessionIds.length > 1 && (
+                      <span>• ⚡ Multi-Chip: <strong>{selectedLog.sessionIds.length} contas</strong></span>
+                    )}
                   </DialogDescription>
                 </div>
+
                 {selectedLog && (
-                  <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => handleExportReport(selectedLog)}>
-                    <Download className="h-3.5 w-3.5 mr-1" /> Baixar Excel
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedLog.status === "running" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+                        onClick={() => handleControlBroadcast("pause", selectedLog.id)}
+                      >
+                        <Pause className="h-3.5 w-3.5 mr-1" /> Pausar
+                      </Button>
+                    )}
+                    {selectedLog.status === "paused" && (
+                      <Button
+                        size="sm"
+                        className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => handleControlBroadcast("resume", selectedLog.id)}
+                      >
+                        <Play className="h-3.5 w-3.5 mr-1" /> Retomar
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => handleExportReport(selectedLog)}>
+                      <Download className="h-3.5 w-3.5 mr-1" /> Baixar Excel
+                    </Button>
+                  </div>
                 )}
               </div>
             </DialogHeader>
@@ -2768,10 +3155,10 @@ export default function BroadcastPage() {
               </div>
             ) : selectedLog ? (
               <div className="space-y-4 overflow-y-auto pr-1 flex-1">
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-3 text-center">
+                {/* 4 KPIs de Auditoria e Conversão */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
                   <div className="bg-emerald-50 dark:bg-emerald-950/20 p-2.5 rounded-lg border border-emerald-500/20">
-                    <span className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold block">Sucessos</span>
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold block">Enviados</span>
                     <span className="text-lg font-bold font-mono text-emerald-600">{selectedLog.sent}</span>
                   </div>
                   <div className="bg-red-50 dark:bg-red-950/20 p-2.5 rounded-lg border border-red-500/20">
@@ -2782,6 +3169,15 @@ export default function BroadcastPage() {
                     <span className="text-xs text-muted-foreground font-semibold block">Taxa de Entrega</span>
                     <span className="text-lg font-bold font-mono text-foreground">
                       {selectedLog.total > 0 ? Math.round((selectedLog.sent / selectedLog.total) * 100) : 0}%
+                    </span>
+                  </div>
+                  <div className="bg-emerald-500/10 p-2.5 rounded-lg border border-emerald-500/30">
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold block">Respostas (Conversão)</span>
+                    <span className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                      {selectedLog.responded || 0}
+                      <span className="text-xs font-normal text-muted-foreground ml-1">
+                        ({selectedLog.sent > 0 ? Math.round(((selectedLog.responded || 0) / selectedLog.sent) * 100) : 0}%)
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -2833,38 +3229,151 @@ export default function BroadcastPage() {
                   </div>
                 )}
 
-                {/* Tabela de Destinatários com Texto Personalizado */}
+                {/* Filtros e Busca de Leads no Histórico de Auditoria */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
+                  <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-lg border border-border/40 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setDetailStatusFilter("all")}
+                      className={`px-2.5 py-1 rounded font-medium transition-all ${
+                        detailStatusFilter === "all" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Todos ({(selectedLog.recipients || []).length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailStatusFilter("sent")}
+                      className={`px-2.5 py-1 rounded font-medium transition-all ${
+                        detailStatusFilter === "sent" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Enviados ({(selectedLog.recipients || []).filter((r) => r.status === "sent").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailStatusFilter("responded")}
+                      className={`px-2.5 py-1 rounded font-medium transition-all ${
+                        detailStatusFilter === "responded" ? "bg-background text-emerald-600 shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      💬 Respondeu ({(selectedLog.recipients || []).filter((r) => r.status === "responded").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailStatusFilter("failed")}
+                      className={`px-2.5 py-1 rounded font-medium transition-all ${
+                        detailStatusFilter === "failed" ? "bg-background text-red-600 shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Falhas ({(selectedLog.recipients || []).filter((r) => r.status === "failed").length})
+                    </button>
+                  </div>
+
+                  <Input
+                    placeholder="Buscar lead por nome ou telefone..."
+                    value={detailSearch}
+                    onChange={(e) => setDetailSearch(e.target.value)}
+                    className="h-8 text-xs sm:w-64"
+                  />
+                </div>
+
+                {/* Tabela de Destinatários com Auditoria Completa */}
                 <div className="border border-border/60 rounded-lg overflow-hidden">
-                  <div className="max-h-[320px] overflow-y-auto">
+                  <div className="max-h-[360px] overflow-y-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-muted/40 text-muted-foreground sticky top-0 border-b border-border/40">
+                      <thead className="bg-muted/50 text-muted-foreground sticky top-0 border-b border-border/40">
                         <tr>
-                          <th className="p-2.5 text-left font-semibold">Contato</th>
+                          <th className="p-2.5 text-left font-semibold w-10">#</th>
+                          <th className="p-2.5 text-left font-semibold">Destinatário</th>
+                          <th className="p-2.5 text-left font-semibold">Chip Utilizado</th>
                           <th className="p-2.5 text-left font-semibold">Status</th>
-                          <th className="p-2.5 text-left font-semibold">Mensagem Personalizada Exata</th>
+                          <th className="p-2.5 text-left font-semibold">Resposta do Lead</th>
+                          <th className="p-2.5 text-left font-semibold">Mensagem Enviada</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40">
-                        {(selectedLog.recipients || []).map((r) => (
-                          <tr key={r.id} className="hover:bg-muted/20">
-                            <td className="p-2.5 font-mono">
-                              <div className="font-semibold">{r.name || "Sem Nome"}</div>
-                              <div className="text-[10px] text-muted-foreground">{r.jid.replace("@s.whatsapp.net", "")}</div>
-                            </td>
-                            <td className="p-2.5">
-                              {r.status === "sent" ? (
-                                <Badge variant="default" className="text-[10px] bg-emerald-600">Enviado</Badge>
-                              ) : r.status === "failed" ? (
-                                <Badge variant="destructive" className="text-[10px]">Falhou</Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-[10px]">Pendente</Badge>
-                              )}
-                            </td>
-                            <td className="p-2.5 max-w-xs truncate font-mono text-[11px] text-muted-foreground">
-                              {r.resolvedMessage || selectedLog.message}
-                            </td>
-                          </tr>
-                        ))}
+                        {(() => {
+                          const filtered = (selectedLog.recipients || []).filter((r) => {
+                            if (detailStatusFilter !== "all" && r.status !== detailStatusFilter) {
+                              return false;
+                            }
+                            if (detailSearch.trim()) {
+                              const s = detailSearch.toLowerCase();
+                              const matchName = (r.name || "").toLowerCase().includes(s);
+                              const matchPhone = r.jid.includes(s);
+                              const matchReply = (r.responseMessage || "").toLowerCase().includes(s);
+                              return matchName || matchPhone || matchReply;
+                            }
+                            return true;
+                          });
+
+                          if (filtered.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                                  Nenhum registro encontrado com os filtros aplicados.
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return filtered.map((r, idx) => (
+                            <tr key={r.id} className="hover:bg-muted/20">
+                              <td className="p-2.5 font-mono text-[10px] text-muted-foreground">{idx + 1}</td>
+                              <td className="p-2.5 font-mono">
+                                <div className="font-semibold text-foreground">{r.name || "Sem Nome"}</div>
+                                <div className="text-[10px] text-muted-foreground">{r.jid.replace("@s.whatsapp.net", "")}</div>
+                              </td>
+                              <td className="p-2.5">
+                                <Badge variant="outline" className="text-[10px] font-mono">
+                                  📱 {r.sessionIdUsed || selectedLog.sessionId}
+                                </Badge>
+                              </td>
+                              <td className="p-2.5">
+                                {r.status === "responded" ? (
+                                  <Badge className="text-[10px] bg-emerald-600 text-white font-semibold">
+                                    Respondeu 💬
+                                  </Badge>
+                                ) : r.status === "sent" ? (
+                                  <Badge variant="default" className="text-[10px] bg-emerald-600">
+                                    Enviado ✓
+                                  </Badge>
+                                ) : r.status === "failed" ? (
+                                  <div className="space-y-0.5">
+                                    <Badge variant="destructive" className="text-[10px]">Falhou ✗</Badge>
+                                    {r.error && (
+                                      <p className="text-[10px] text-destructive truncate max-w-[140px]" title={r.error}>
+                                        {r.error}
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px]">Pendente</Badge>
+                                )}
+                              </td>
+                              <td className="p-2.5 max-w-[180px]">
+                                {r.status === "responded" && r.responseMessage ? (
+                                  <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 rounded p-1.5 text-[11px] text-emerald-900 dark:text-emerald-200">
+                                    <div className="font-medium truncate" title={r.responseMessage}>
+                                      "{r.responseMessage}"
+                                    </div>
+                                    {r.respondedAt && (
+                                      <div className="text-[9px] text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                        {new Date(r.respondedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-muted-foreground opacity-50">—</span>
+                                )}
+                              </td>
+                              <td className="p-2.5 max-w-[200px] truncate font-mono text-[11px] text-muted-foreground" title={r.resolvedMessage || selectedLog.message}>
+                                {r.resolvedMessage || selectedLog.message}
+                              </td>
+                            </tr>
+                          ));
+                        })()}
                       </tbody>
                     </table>
                   </div>

@@ -19,13 +19,24 @@ export async function GET(
             return NextResponse.json({ status: false, message: "Forbidden" }, { status: 403 });
         }
 
-        const log = await prisma.broadcastLog.findFirst({
-            where: { id: logId, sessionId },
-            include: { recipients: true }
+        const log = await prisma.broadcastLog.findUnique({
+            where: { id: logId },
+            include: {
+                recipients: {
+                    orderBy: [
+                        { id: "asc" }
+                    ]
+                }
+            }
         });
 
         if (!log) {
             return NextResponse.json({ status: false, message: "Broadcast not found" }, { status: 404 });
+        }
+
+        const canAccessLog = await canAccessSession(user.id, user.role, log.sessionId);
+        if (!canAccessLog && log.sessionId !== sessionId) {
+            return NextResponse.json({ status: false, message: "Forbidden" }, { status: 403 });
         }
 
         return NextResponse.json({ status: true, data: log });
