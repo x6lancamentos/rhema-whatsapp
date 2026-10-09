@@ -54,6 +54,17 @@ import {
   Clock4,
   Smartphone,
   CalendarClock,
+  Rocket,
+  ArrowRight,
+  ArrowLeft,
+  Minimize2,
+  Maximize2,
+  ChevronRight,
+  ShieldCheck,
+  CheckCircle,
+  MessageSquare,
+  Timer,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "@/components/dashboard/session-provider";
@@ -171,6 +182,12 @@ export default function BroadcastPage() {
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<"new" | "templates" | "lists" | "history" | "blacklist">("new");
 
+  // Stepper Wizard State (Passo 1: Destinatários, 2: Mensagem, 3: Segurança/Chips, 4: Revisão)
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1);
+
+  // Floating Broadcast Miniplayer State
+  const [miniplayerMinimized, setMiniplayerMinimized] = useState<boolean>(false);
+
   // Recipient Mode: "file" | "label" | "list" | "manual"
   const [recipientSource, setRecipientSource] = useState<"file" | "label" | "list" | "manual">("file");
 
@@ -218,6 +235,24 @@ export default function BroadcastPage() {
   const [enableBatchPause, setEnableBatchPause] = useState(true);
   const [batchSize, setBatchSize] = useState(20);
   const [batchPauseMin, setBatchPauseMin] = useState(3);
+
+  // Helper para cálculo dinâmico da estimativa de tempo total de envio
+  const getEstimatedDuration = useCallback(() => {
+    const total = contactsList.length;
+    if (total === 0) return "0 min";
+    const numChips = Math.max(1, selectedSessionIds.length || 1);
+    const avgDelaySec = (minDelaySec + maxDelaySec) / 2;
+    let totalSec = (total / numChips) * avgDelaySec;
+    if (enableBatchPause && batchSize > 0) {
+      const batches = Math.floor(total / (batchSize * numChips));
+      totalSec += batches * (batchPauseMin * 60);
+    }
+    const minutes = Math.ceil(totalSec / 60);
+    if (minutes < 60) return `~${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const remMinutes = minutes % 60;
+    return `~${hours}h ${remMinutes > 0 ? `${remMinutes}m` : ""}`;
+  }, [contactsList.length, selectedSessionIds.length, minDelaySec, maxDelaySec, enableBatchPause, batchSize, batchPauseMin]);
 
   // Real-time progress and control
   const [loading, setLoading] = useState(false);
@@ -419,6 +454,7 @@ export default function BroadcastPage() {
             updatePreview(suggestedMsg, parsed);
 
             toast.success(`⚡ ${parsed.length} leads do Imoview carregados com sucesso para resgate!`);
+            setWizardStep(2);
             localStorage.removeItem("imoview_resgate_leads");
           }
         }
@@ -468,6 +504,7 @@ export default function BroadcastPage() {
             updatePreview(ownerSuggestedMsg, parsed);
 
             toast.success(`⚡ ${parsed.length} proprietários do Imoview carregados com sucesso!`);
+            setWizardStep(2);
             localStorage.removeItem("imoview_proprietarios_leads");
           }
         }
@@ -1385,48 +1422,205 @@ export default function BroadcastPage() {
         </div>
 
         {/* ========================================================================= */}
-        {/* TAB 1: NOVO DISPARO */}
+        {/* ========================================================================= */}
+        {/* TAB 1: NOVO DISPARO (STEPPER WIZARD UX EM 4 ETAPAS) */}
         {/* ========================================================================= */}
         {activeTab === "new" && (
           <div className="space-y-6">
-            {/* Identificação da Campanha */}
-            <Card className="border-border/60 shadow-xs bg-muted/20">
-              <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 flex-1">
-                  <Tag className="h-4 w-4 text-primary shrink-0" />
-                  <div className="flex-1 max-w-lg">
-                    <Input
-                      placeholder="Nome / Identificador da Campanha (opcional, ex: Resgate Leads Frios Outubro)"
-                      value={campaignName}
-                      onChange={(e) => setCampaignName(e.target.value)}
-                      className="h-8 text-xs font-medium bg-background"
-                    />
+            {/* WIZARD STEPPER HEADER NAVEGADOR */}
+            <div className="bg-card/70 backdrop-blur-md border border-border/60 rounded-2xl p-3 sm:p-5 shadow-xs">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+                {/* Etapa 1: Destinatários */}
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(1)}
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                    wizardStep === 1
+                      ? "bg-primary/10 border-primary ring-2 ring-primary/20 shadow-xs"
+                      : contactsList.length > 0
+                      ? "bg-emerald-500/5 border-emerald-500/30 hover:bg-emerald-500/10"
+                      : "bg-muted/20 border-border/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                      wizardStep === 1
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : contactsList.length > 0
+                        ? "bg-emerald-600 text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {contactsList.length > 0 && wizardStep !== 1 ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      "1"
+                    )}
                   </div>
-                </div>
-                <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 shrink-0">
-                  <Info className="h-3.5 w-3.5 text-blue-500" />
-                  Facilita a auditoria e análise de métricas no Histórico.
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
-              {/* COLUNA ESQUERDA: DESTINATÁRIOS (5 COLUNAS) */}
-              <div className="lg:col-span-5 space-y-4">
-                <Card className="border-border/60 shadow-sm overflow-hidden">
-                  <CardHeader className="pb-3 bg-muted/20 border-b border-border/40">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base font-bold flex items-center gap-2">
-                        <Users className="h-4 w-4 text-primary" />
-                        1. Origem dos Destinatários
-                      </CardTitle>
-                      <Badge variant="secondary" className="font-mono text-xs font-semibold">
-                        {contactsList.length} contatos
-                      </Badge>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-bold truncate flex items-center gap-1.5">
+                      <span>Destinatários</span>
+                      {contactsList.length > 0 && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      )}
                     </div>
-                  </CardHeader>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {contactsList.length > 0
+                        ? `${contactsList.length} contatos`
+                        : "Planilha, etiquetas, CRM"}
+                    </div>
+                  </div>
+                </button>
 
-                  <CardContent className="pt-4 space-y-4">
+                {/* Etapa 2: Mensagem & Mídia */}
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(2)}
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                    wizardStep === 2
+                      ? "bg-primary/10 border-primary ring-2 ring-primary/20 shadow-xs"
+                      : (message.trim() || mediaUrl || audioUrl)
+                      ? "bg-emerald-500/5 border-emerald-500/30 hover:bg-emerald-500/10"
+                      : "bg-muted/20 border-border/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                      wizardStep === 2
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : (message.trim() || mediaUrl || audioUrl)
+                        ? "bg-emerald-600 text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {(message.trim() || mediaUrl || audioUrl) && wizardStep !== 2 ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      "2"
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-bold truncate flex items-center gap-1.5">
+                      <span>Mensagem & Mídia</span>
+                      {(message.trim() || mediaUrl || audioUrl) && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {message.trim() ? "Mensagem pronta" : "Texto, spintax e áudio"}
+                    </div>
+                  </div>
+                </button>
+
+                {/* Etapa 3: Blindagem & Multi-Chip */}
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(3)}
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                    wizardStep === 3
+                      ? "bg-primary/10 border-primary ring-2 ring-primary/20 shadow-xs"
+                      : "bg-muted/20 border-border/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                      wizardStep === 3
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-bold truncate">
+                      Blindagem & Chips
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {(selectedSessionIds.length || 1)} chip(s) • {minDelaySec}-{maxDelaySec}s
+                    </div>
+                  </div>
+                </button>
+
+                {/* Etapa 4: Revisão & Decolagem */}
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(4)}
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                    wizardStep === 4
+                      ? "bg-gradient-to-r from-emerald-600/15 to-teal-600/15 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                      : "bg-muted/20 border-border/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                      wizardStep === 4
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <Rocket className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-bold truncate text-foreground">
+                      Revisão & Decolagem
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {contactsList.length > 0 ? getEstimatedDuration() : "Checklist final"}
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Linha de progresso visual */}
+              <div className="mt-3.5 w-full bg-muted/60 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-primary h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${(wizardStep / 4) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* ================================================================= */}
+            {/* ETAPA 1: DESTINATÁRIOS & SEGMENTAÇÃO */}
+            {/* ================================================================= */}
+            {wizardStep === 1 && (
+              <div className="space-y-6 animate-in fade-in-50 duration-200">
+                {/* Identificação da Campanha */}
+                <Card className="border-border/60 shadow-xs bg-muted/20">
+                  <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 flex-1">
+                      <Tag className="h-4 w-4 text-primary shrink-0" />
+                      <div className="flex-1 max-w-lg">
+                        <Input
+                          placeholder="Nome / Identificador da Campanha (opcional, ex: Resgate Leads Frios Outubro)"
+                          value={campaignName}
+                          onChange={(e) => setCampaignName(e.target.value)}
+                          className="h-8 text-xs font-medium bg-background"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 shrink-0">
+                      <Info className="h-3.5 w-3.5 text-blue-500" />
+                      Facilita a auditoria e análise de métricas no Histórico.
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-4">
+                  <Card className="border-border/60 shadow-sm overflow-hidden">
+                    <CardHeader className="pb-3 bg-muted/20 border-b border-border/40">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base font-bold flex items-center gap-2">
+                          <Users className="h-4 w-4 text-primary" />
+                          Origem dos Destinatários
+                        </CardTitle>
+                        <Badge variant="secondary" className="font-mono text-xs font-semibold">
+                          {contactsList.length} contatos
+                        </Badge>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="pt-4 space-y-4">
                     {/* Botões de Escolha de Origem */}
                     <div className="grid grid-cols-4 gap-1.5 bg-muted/50 p-1 rounded-lg">
                       <button
@@ -1658,23 +1852,54 @@ export default function BroadcastPage() {
                           className="px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary font-mono text-[11px] font-semibold transition-colors"
                           title={`Inserir {{${col.toLowerCase()}}}`}
                         >
-                          +{`{{${col.toLowerCase()}}`}
+                          {`+{{${col.toLowerCase()}}}`}
                         </button>
                       ))}
                     </CardContent>
                   </Card>
                 )}
-              </div>
+                </div>
 
-              {/* COLUNA DIREITA: EDITOR + SIMULADOR + CONTROLE ANTI-BAN (7 COLUNAS) */}
-              <div className="lg:col-span-7 space-y-4">
-                <Card className="border-border/60 shadow-sm">
-                  <CardHeader className="pb-3 bg-muted/20 border-b border-border/40">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base font-bold flex items-center gap-2">
-                        <Edit3 className="h-4 w-4 text-primary" />
-                        2. Mensagem, Spintax & Modelos
-                      </CardTitle>
+                {/* Rodapé de Navegação da Etapa 1 */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/60">
+                  <div className="text-xs text-muted-foreground">
+                    {contactsList.length > 0 ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
+                        <CheckCircle2 className="h-4 w-4" /> {contactsList.length} contatos prontos para a campanha.
+                      </span>
+                    ) : (
+                      <span>Carregue uma planilha ou selecione uma lista para avançar.</span>
+                    )}
+                  </div>
+
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto h-11 px-6 font-bold shadow-md shadow-primary/20 gap-2"
+                    onClick={() => setWizardStep(2)}
+                    disabled={contactsList.length === 0}
+                  >
+                    <span>Avançar para Mensagem & Mídia (Passo 2)</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* ETAPA 2: MENSAGEM, MÍDIA, SPINTAX & LIVE PREVIEW */}
+            {/* ================================================================= */}
+            {wizardStep === 2 && (
+              <div className="space-y-6 animate-in fade-in-50 duration-200">
+                <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
+                  {/* COLUNA ESQUERDA: EDITOR DE MENSAGEM E ANEXOS (7 COLUNAS) */}
+                  <div className="lg:col-span-7 space-y-4">
+                    <Card className="border-border/60 shadow-sm">
+                      <CardHeader className="pb-3 bg-muted/20 border-b border-border/40">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base font-bold flex items-center gap-2">
+                            <Edit3 className="h-4 w-4 text-primary" />
+                            Editor de Mensagem & Spintax
+                          </CardTitle>
 
                       {/* Dropdown de Modelos Prontos */}
                       {templates.length > 0 && (
@@ -1976,48 +2201,117 @@ export default function BroadcastPage() {
                       )}
                     </div>
 
-                    {/* Simulador de Preview Estilo WhatsApp */}
-                    {previewSample && (
-                      <div className="bg-slate-100 dark:bg-slate-900/60 p-3.5 rounded-xl border border-border/60 space-y-2">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span className="font-semibold flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                            <Eye className="h-3.5 w-3.5" /> Pré-visualização WhatsApp (Simulação Real):
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => updatePreview(message, contactsList)}
-                            className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1"
-                          >
-                            <RotateCcw className="h-3 w-3" /> Sortear Outra Variação
-                          </button>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* COLUNA DIREITA: LIVE WHATSAPP PHONE PREVIEW (5 COLUNAS) */}
+                  <div className="lg:col-span-5 space-y-4">
+                    <Card className="border-border/60 shadow-sm overflow-hidden sticky top-6">
+                      <CardHeader className="py-3 px-4 bg-emerald-600 text-white flex flex-row items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white">
+                            RH
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold leading-tight">Rhema Imóveis (Preview)</div>
+                            <div className="text-[10px] text-emerald-100 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-200" />
+                              online agora
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Balão WhatsApp */}
-                        <div className="max-w-[85%] bg-white dark:bg-emerald-950/40 text-slate-800 dark:text-slate-100 rounded-xl rounded-tl-xs p-3 shadow-xs text-xs sm:text-sm whitespace-pre-wrap leading-relaxed border border-border/40">
+                        <button
+                          type="button"
+                          onClick={() => updatePreview(message, contactsList)}
+                          className="text-[11px] text-white hover:text-emerald-100 flex items-center gap-1 bg-white/10 px-2 py-1 rounded-md transition-colors"
+                          title="Sortear nova variação Spintax"
+                        >
+                          <RotateCcw className="h-3 w-3" /> Sortear
+                        </button>
+                      </CardHeader>
+
+                      <CardContent className="p-4 bg-slate-100 dark:bg-slate-950/80 min-h-[300px] flex flex-col justify-end space-y-3">
+                        <div className="text-center">
+                          <span className="text-[10px] uppercase font-semibold text-muted-foreground bg-background/80 px-2.5 py-0.5 rounded-full border border-border/40">
+                            Hoje
+                          </span>
+                        </div>
+
+                        {/* Balão WhatsApp Realista */}
+                        <div className="self-end max-w-[92%] bg-[#dcf8c6] dark:bg-[#056162] text-slate-900 dark:text-slate-100 rounded-xl rounded-tr-xs p-3 shadow-sm text-xs sm:text-sm whitespace-pre-wrap leading-relaxed border border-emerald-500/20">
                           {audioUrl && (
-                            <div className="flex items-center gap-2 mb-2 p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300">
-                              <Mic className="h-4 w-4 text-emerald-600" />
-                              <span>[Mensagem de Voz PTT Gravada]</span>
+                            <div className="flex items-center gap-2 mb-2 p-2 bg-emerald-700/10 dark:bg-emerald-900/40 rounded-lg border border-emerald-500/20 text-xs">
+                              <Mic className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+                              <span className="font-medium text-emerald-900 dark:text-emerald-200">[Mensagem de Voz Gravada PTT]</span>
                             </div>
                           )}
+
                           {mediaUrl && (
-                            <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-500/20 text-xs text-blue-800 dark:text-blue-300">
-                              <span>📎 [Arquivo Anexado: {mediaType}]</span>
+                            <div className="mb-2 p-2 bg-blue-700/10 dark:bg-blue-900/40 rounded-lg border border-blue-500/20 text-xs">
+                              <span className="font-medium text-blue-900 dark:text-blue-200">📎 [Arquivo: {mediaType}]</span>
                             </div>
                           )}
-                          {previewSample}
-                          <div className="text-[10px] text-slate-400 dark:text-slate-400 text-right mt-1">
+
+                          <div>
+                            {previewSample || (
+                              <span className="text-muted-foreground italic text-xs">
+                                Digite sua mensagem no editor ao lado para ver a prévia ao vivo com dados dinâmicos...
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-[10px] text-emerald-800/70 dark:text-emerald-300/70 text-right mt-1 font-mono">
                             12:00 ✓✓
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
 
-                {/* Card de Rotação Multi-Chip (Multi-Sessão / Round-Robin) */}
-                <Card className="border-border/60 shadow-sm">
-                  <CardHeader className="py-3 px-5 bg-muted/20 border-b border-border/40">
+                        <div className="text-[11px] text-muted-foreground text-center pt-2">
+                          Variáveis simuladas usando o primeiro contato:{" "}
+                          <strong className="text-foreground">
+                            {contactsList[0]?.name || "Brunno"} ({contactsList[0]?.phone || "5519998765432"})
+                          </strong>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Rodapé de Navegação da Etapa 2 */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto h-11 px-5 font-semibold gap-2"
+                    onClick={() => setWizardStep(1)}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Voltar para Destinatários (Passo 1)</span>
+                  </Button>
+
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto h-11 px-6 font-bold shadow-md shadow-primary/20 gap-2"
+                    onClick={() => setWizardStep(3)}
+                    disabled={!message.trim() && !mediaUrl && !audioUrl}
+                  >
+                    <span>Avançar para Blindagem & Multi-Chip (Passo 3)</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* ETAPA 3: PROTEÇÃO ANTI-BLOQUEIO, MULTI-CHIP & AGENDAMENTO */}
+            {/* ================================================================= */}
+            {wizardStep === 3 && (
+              <div className="space-y-6 animate-in fade-in-50 duration-200">
+                <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
+                  {/* Card de Rotação Multi-Chip (Multi-Sessão / Round-Robin) */}
+                  <div className="lg:col-span-12">
+                    <Card className="border-border/60 shadow-sm">
+                      <CardHeader className="py-3 px-5 bg-muted/20 border-b border-border/40">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -2361,37 +2655,185 @@ export default function BroadcastPage() {
                       )}
                     </div>
 
-                    {/* Botão de Disparo */}
-                    <Button
-                      size="lg"
-                      className="w-full h-12 text-sm font-bold shadow-md shadow-primary/20"
-                      onClick={handleStartBroadcast}
-                      disabled={
-                        loading ||
-                        !sessionId ||
-                        contactsList.length === 0 ||
-                        (!message.trim() && !mediaUrl && !audioUrl)
-                      }
-                    >
-                      {loading ? (
-                        <>
-                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Disparando em Segundo Plano...
-                        </>
-                      ) : isScheduled ? (
-                        <>
-                          <CalendarClock className="mr-2 h-4 w-4" /> Agendar Disparo para{" "}
-                          {contactsList.length} Contatos
-                        </>
-                      ) : (
-                        <>
-                          <Send className="mr-2 h-4 w-4" /> Iniciar Disparo para {contactsList.length} Contatos
-                        </>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Rodapé de Navegação da Etapa 3 */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto h-11 px-5 font-semibold gap-2"
+                    onClick={() => setWizardStep(2)}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Voltar para Mensagem & Mídia</span>
+                  </Button>
+
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto h-11 px-6 font-bold shadow-md shadow-primary/20 gap-2"
+                    onClick={() => setWizardStep(4)}
+                  >
+                    <span>Avançar para Revisão & Decolagem (Passo 4)</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* ETAPA 4: REVISÃO EXECUTIVA & DECOLAGEM */}
+            {/* ================================================================= */}
+            {wizardStep === 4 && (
+              <div className="space-y-6 animate-in fade-in-50 duration-200">
+                {/* CHECKLIST EXECUTIVO PRÉ-VOO */}
+                <Card className="border-border/60 shadow-lg bg-gradient-to-br from-card to-muted/30 overflow-hidden">
+                  <CardHeader className="border-b border-border/40 bg-muted/20 pb-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
+                          <Rocket className="h-5 w-5 text-emerald-500" />
+                          Revisão Pré-Voo da Campanha
+                        </CardTitle>
+                        <CardDescription className="text-xs mt-0.5">
+                          Confira todos os parâmetros antes de iniciar os disparos no WhatsApp.
+                        </CardDescription>
+                      </div>
+
+                      <Badge variant="outline" className="font-mono text-xs px-2.5 py-1 bg-background">
+                        {campaignName || "Campanha sem identificador"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="pt-6 space-y-6">
+                    {/* 4 Cards de Métricas Consolidadas */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="p-3.5 rounded-xl border border-border/50 bg-background/80 space-y-1">
+                        <span className="text-[11px] text-muted-foreground font-semibold flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5 text-blue-500" /> Destinatários
+                        </span>
+                        <div className="text-xl font-bold font-mono text-foreground">
+                          {contactsList.length}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground block truncate">
+                          {fileStats?.name || "Lista filtrada"}
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl border border-border/50 bg-background/80 space-y-1">
+                        <span className="text-[11px] text-muted-foreground font-semibold flex items-center gap-1.5">
+                          <Smartphone className="h-3.5 w-3.5 text-emerald-500" /> Chips / Sessões
+                        </span>
+                        <div className="text-xl font-bold font-mono text-foreground">
+                          {(selectedSessionIds.length || 1)} chip(s)
+                        </div>
+                        <span className="text-[10px] text-muted-foreground block truncate">
+                          ~{Math.ceil(contactsList.length / Math.max(1, selectedSessionIds.length || 1))} msgs/chip
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl border border-border/50 bg-background/80 space-y-1">
+                        <span className="text-[11px] text-muted-foreground font-semibold flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-amber-500" /> Tempo Estimado
+                        </span>
+                        <div className="text-xl font-bold font-mono text-foreground">
+                          {getEstimatedDuration()}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground block truncate">
+                          Delay médio: {Math.round((minDelaySec + maxDelaySec) / 2)}s
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl border border-border/50 bg-background/80 space-y-1">
+                        <span className="text-[11px] text-muted-foreground font-semibold flex items-center gap-1.5">
+                          <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Proteção Anti-Ban
+                        </span>
+                        <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="h-4 w-4" /> Blindagem Alta
+                        </div>
+                        <span className="text-[10px] text-muted-foreground block truncate">
+                          {businessHoursOnly ? "Horário comercial ativo" : "Envio contínuo"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Resumo da Mensagem e Anexos */}
+                    <div className="p-4 rounded-xl border border-border/50 bg-background/60 space-y-2.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-foreground flex items-center gap-1.5">
+                          <MessageSquare className="h-4 w-4 text-primary" /> Amostra Real do Disparo:
+                        </span>
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          Para: {contactsList[0]?.name || "Primeiro Contato"} ({contactsList[0]?.phone || "Telefone"})
+                        </span>
+                      </div>
+
+                      <div className="p-3 bg-muted/40 rounded-lg text-xs sm:text-sm font-mono whitespace-pre-wrap leading-relaxed border border-border/40 text-foreground">
+                        {previewSample || message}
+                      </div>
+
+                      {(audioUrl || mediaUrl) && (
+                        <div className="flex flex-wrap gap-2 pt-1 text-xs">
+                          {audioUrl && (
+                            <Badge variant="outline" className="border-emerald-500/40 text-emerald-600">
+                              <Mic className="h-3 w-3 mr-1" /> Áudio Gravado PTT Incluso
+                            </Badge>
+                          )}
+                          {mediaUrl && (
+                            <Badge variant="outline" className="border-blue-500/40 text-blue-600">
+                              📎 Mídia Anexa: {mediaFileName || mediaType}
+                            </Badge>
+                          )}
+                        </div>
                       )}
-                    </Button>
+                    </div>
+
+                    {/* Botão Master de Disparo / Decolagem */}
+                    <div className="pt-2">
+                      <Button
+                        size="lg"
+                        className="w-full h-14 text-base font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-xl shadow-emerald-600/25 transition-all text-white gap-2"
+                        onClick={handleStartBroadcast}
+                        disabled={
+                          loading ||
+                          !sessionId ||
+                          contactsList.length === 0 ||
+                          (!message.trim() && !mediaUrl && !audioUrl)
+                        }
+                      >
+                        {loading ? (
+                          <>
+                            <RefreshCw className="mr-2 h-5 w-5 animate-spin" /> Disparando em Segundo Plano...
+                          </>
+                        ) : isScheduled ? (
+                          <>
+                            <CalendarClock className="mr-2 h-5 w-5" /> Agendar Disparo para{" "}
+                            {contactsList.length} Contatos
+                          </>
+                        ) : (
+                          <>
+                            <Rocket className="mr-2 h-5 w-5 animate-bounce" /> Decolar Campanha Agora para {contactsList.length} Destinatários
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
-              </div>
-            </div>
+
+                {/* Rodapé de Navegação da Etapa 4 */}
+                <div className="flex items-center justify-between pt-2">
+                  <Button
+                    variant="outline"
+                    className="h-10 px-4 text-xs font-semibold gap-2"
+                    onClick={() => setWizardStep(3)}
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span>Voltar para Blindagem & Chips</span>
+                  </Button>
+                </div>
 
             {/* Painel de Monitoramento ao Vivo (Socket.IO) */}
             {broadcastProgress && (
@@ -2525,6 +2967,8 @@ export default function BroadcastPage() {
                   )}
                 </CardContent>
               </Card>
+            )}
+              </div>
             )}
           </div>
         )}
@@ -3819,6 +4263,252 @@ export default function BroadcastPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* ========================================================================= */}
+        {/* FLOATING BROADCAST MINIPLAYER (GLOBAL PARA TODAS AS ABAS) */}
+        {/* ========================================================================= */}
+        {broadcastProgress && (
+          <div className="fixed bottom-6 right-6 z-50 transition-all duration-300">
+            {miniplayerMinimized ? (
+              /* MODO COMPACTO: Pílula Flutuante com Glassmorphism */
+              <div
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-xl border transition-all ${
+                  broadcastProgress.status === "completed"
+                    ? "bg-slate-950/90 text-emerald-400 border-emerald-500/40"
+                    : broadcastProgress.status === "paused"
+                    ? "bg-slate-950/90 text-amber-400 border-amber-500/40"
+                    : broadcastProgress.status === "cancelled"
+                    ? "bg-slate-950/90 text-red-400 border-red-500/40"
+                    : "bg-slate-950/90 text-white border-blue-500/40"
+                }`}
+              >
+                {/* Indicador de Status */}
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      broadcastProgress.status === "running"
+                        ? "bg-blue-400 animate-pulse"
+                        : broadcastProgress.status === "paused"
+                        ? "bg-amber-400"
+                        : broadcastProgress.status === "completed"
+                        ? "bg-emerald-400"
+                        : "bg-red-400"
+                    }`}
+                  />
+                  <span className="text-xs font-bold font-mono">
+                    {broadcastProgress.status === "completed"
+                      ? "Concluído"
+                      : broadcastProgress.status === "paused"
+                      ? "Pausado"
+                      : `${broadcastProgress.progress || 0}%`}
+                  </span>
+                </div>
+
+                <span className="text-xs font-medium text-slate-300 font-mono">
+                  ({broadcastProgress.sent}/{broadcastProgress.total})
+                </span>
+
+                {/* Controles Rápidos */}
+                {broadcastProgress.status === "running" && (
+                  <button
+                    type="button"
+                    onClick={() => handleControlBroadcast("pause")}
+                    className="p-1 rounded-full hover:bg-white/10 text-amber-400 transition-colors"
+                    title="Pausar Disparo"
+                  >
+                    <Pause className="h-3.5 w-3.5" />
+                  </button>
+                )}
+
+                {broadcastProgress.status === "paused" && (
+                  <button
+                    type="button"
+                    onClick={() => handleControlBroadcast("resume")}
+                    className="p-1 rounded-full hover:bg-white/10 text-emerald-400 transition-colors"
+                    title="Retomar Disparo"
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                  </button>
+                )}
+
+                {/* Botão Expandir */}
+                <button
+                  type="button"
+                  onClick={() => setMiniplayerMinimized(false)}
+                  className="p-1 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                  title="Expandir Miniplayer"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              /* MODO EXPANDIDO: Console Flutuante Estilo Dynamic Island */
+              <div className="w-[340px] sm:w-[380px] bg-slate-950/95 dark:bg-slate-950/95 text-white border border-slate-700/80 shadow-2xl backdrop-blur-xl rounded-2xl p-4 space-y-3.5 animate-in slide-in-from-bottom-5 duration-200">
+                {/* Header do Miniplayer */}
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    {broadcastProgress.status === "running" ? (
+                      <Radio className="h-4 w-4 text-blue-400 animate-pulse" />
+                    ) : broadcastProgress.status === "paused" ? (
+                      <Pause className="h-4 w-4 text-amber-400" />
+                    ) : broadcastProgress.status === "completed" ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-400" />
+                    )}
+                    <div>
+                      <h4 className="text-xs font-bold leading-tight flex items-center gap-1.5">
+                        <span>
+                          {broadcastProgress.status === "running"
+                            ? "Campanha em Andamento"
+                            : broadcastProgress.status === "paused"
+                            ? "Campanha Pausada"
+                            : broadcastProgress.status === "completed"
+                            ? "Campanha Concluída"
+                            : "Campanha Cancelada"}
+                        </span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        {broadcastProgress.currentSession
+                          ? `Chip: ${broadcastProgress.currentSession}`
+                          : `Sessão: ${sessionId || "Padrão"}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Ações do Card */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setMiniplayerMinimized(true)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      title="Minimizar para Pílula"
+                    >
+                      <Minimize2 className="h-3.5 w-3.5" />
+                    </button>
+                    {(broadcastProgress.status === "completed" || broadcastProgress.status === "cancelled") && (
+                      <button
+                        type="button"
+                        onClick={() => setBroadcastProgress(null)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                        title="Fechar Miniplayer"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Barra de Progresso com Gradiente */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-300">Progresso</span>
+                    <span className="font-mono text-emerald-400 font-bold">
+                      {broadcastProgress.progress || 0}% ({broadcastProgress.sent + broadcastProgress.failed}/{broadcastProgress.total})
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 transition-all duration-300 rounded-full"
+                      style={{ width: `${broadcastProgress.progress || 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Métricas Rápidas: Enviados, Falhas, Restantes */}
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Enviados</span>
+                    <span className="font-bold text-emerald-400 font-mono">
+                      {broadcastProgress.sent}
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Falhas</span>
+                    <span className="font-bold text-red-400 font-mono">
+                      {broadcastProgress.failed}
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Restantes</span>
+                    <span className="font-bold text-slate-300 font-mono">
+                      {broadcastProgress.total - (broadcastProgress.sent + broadcastProgress.failed)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Lead Atual em Processamento */}
+                {broadcastProgress.current && broadcastProgress.status === "running" && (
+                  <div className="text-[11px] bg-slate-900/80 p-2 rounded-lg border border-slate-800/80 text-slate-300 truncate">
+                    <span className="text-slate-400">Disparando agora para: </span>
+                    <strong className="text-white">
+                      {broadcastProgress.currentName || broadcastProgress.current}
+                    </strong>
+                  </div>
+                )}
+
+                {/* Controles Ao Vivo */}
+                <div className="flex items-center gap-2 pt-1">
+                  {broadcastProgress.status === "running" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 h-8 text-xs border-amber-500/50 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20"
+                        onClick={() => handleControlBroadcast("pause")}
+                      >
+                        <Pause className="h-3.5 w-3.5 mr-1" /> Pausar Disparo
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-8 text-xs px-3"
+                        onClick={() => handleControlBroadcast("cancel")}
+                      >
+                        <XCircle className="h-3.5 w-3.5 mr-1" /> Parar
+                      </Button>
+                    </>
+                  )}
+
+                  {broadcastProgress.status === "paused" && (
+                    <>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => handleControlBroadcast("resume")}
+                      >
+                        <Play className="h-3.5 w-3.5 mr-1" /> Retomar Disparo
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-8 text-xs px-3"
+                        onClick={() => handleControlBroadcast("cancel")}
+                      >
+                        <XCircle className="h-3.5 w-3.5 mr-1" /> Cancelar
+                      </Button>
+                    </>
+                  )}
+
+                  {broadcastProgress.status === "completed" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full h-8 text-xs border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/10"
+                      onClick={() => {
+                        setActiveTab("history");
+                        fetchHistory();
+                      }}
+                    >
+                      <History className="h-3.5 w-3.5 mr-1" /> Ver Relatório no Histórico
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </SessionGuard>
   );
