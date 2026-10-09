@@ -219,6 +219,23 @@ export default function BroadcastPage() {
   const [saveListDialogOpen, setSaveListDialogOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
 
+  // Gerenciamento e Edição de Contatos em Memória (Disparo Atual)
+  const [activeContactsDialogOpen, setActiveContactsDialogOpen] = useState(false);
+  const [activeContactsSearch, setActiveContactsSearch] = useState("");
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+
+  // Visualização e Edição de Lista Salva
+  const [listDetailsModalOpen, setListDetailsModalOpen] = useState(false);
+  const [listDetailsLoading, setListDetailsLoading] = useState(false);
+  const [selectedSavedListId, setSelectedSavedListId] = useState("");
+  const [editingSavedListName, setEditingSavedListName] = useState("");
+  const [editingSavedListContacts, setEditingSavedListContacts] = useState<any[]>([]);
+  const [editingSavedListSearch, setEditingSavedListSearch] = useState("");
+  const [newSavedListContactName, setNewSavedListContactName] = useState("");
+  const [newSavedListContactPhone, setNewSavedListContactPhone] = useState("");
+  const [savingListChanges, setSavingListChanges] = useState(false);
+
   // History Tab
   const [history, setHistory] = useState<BroadcastLog[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -347,6 +364,9 @@ export default function BroadcastPage() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             setContactsList(parsed);
             setRecipientSource("manual");
+            // Sincroniza também a caixa de texto manual com os telefones
+            const textLines = parsed.map((p: any) => p.originalPhone || p.phone).filter(Boolean).join("\n");
+            setManualText(textLines);
             setDetectedColumns(["nome", "primeiro_nome", "corretor", "codigo_imovel", "bairro"]);
             setFileStats({
               name: `Imoview CRM (${parsed.length} leads parados)`,
@@ -780,6 +800,170 @@ export default function BroadcastPage() {
     } catch (e: any) {
       toast.error(e.message);
     }
+  };
+
+  // Funções de Edição dos Contatos do Disparo Atual
+  const handleRemoveActiveContact = (indexToRemove: number) => {
+    const updated = contactsList.filter((_, idx) => idx !== indexToRemove);
+    setContactsList(updated);
+    if (recipientSource === "manual") {
+      setManualText(updated.map((c) => c.phone || c.originalPhone).join("\n"));
+    }
+    setFileStats((prev) => (prev ? { ...prev, total: updated.length, valid: updated.length } : null));
+    toast.info("Contato removido do disparo atual");
+  };
+
+  const handleUpdateActiveContact = (index: number, newName: string, newPhone: string) => {
+    const updated = [...contactsList];
+    const target = updated[index];
+    if (!target) return;
+    const sanitized = sanitizePhoneNumber(newPhone);
+    updated[index] = {
+      ...target,
+      name: newName,
+      phone: sanitized.phone,
+      originalPhone: newPhone,
+      jid: sanitized.jid,
+      variables: {
+        ...(target.variables || {}),
+        nome: newName,
+        telefone: sanitized.phone,
+      },
+    };
+    setContactsList(updated);
+    if (recipientSource === "manual") {
+      setManualText(updated.map((c) => c.phone || c.originalPhone).join("\n"));
+    }
+  };
+
+  const handleAddActiveContact = () => {
+    if (!newContactPhone.trim()) return toast.error("Informe o telefone com DDD");
+    const sanitized = sanitizePhoneNumber(newContactPhone.trim());
+    if (!sanitized.isValid) return toast.error("Telefone inválido");
+
+    const newContact: ParsedContactRow = {
+      originalPhone: newContactPhone.trim(),
+      phone: sanitized.phone,
+      jid: sanitized.jid,
+      name: newContactName.trim() || "",
+      isValid: true,
+      variables: {
+        nome: newContactName.trim() || "",
+        primeiro_nome: (newContactName.trim() || "").split(" ")[0] || "",
+        telefone: sanitized.phone,
+      },
+    };
+
+    const updated = [...contactsList, newContact];
+    setContactsList(updated);
+    if (recipientSource === "manual") {
+      setManualText(updated.map((c) => c.phone || c.originalPhone).join("\n"));
+    }
+    setFileStats((prev) => (prev ? { ...prev, total: updated.length, valid: updated.length } : null));
+    setNewContactName("");
+    setNewContactPhone("");
+    toast.success("Contato adicionado ao disparo!");
+  };
+
+  const handleClearAllActiveContacts = () => {
+    if (!confirm("Tem certeza que deseja limpar todos os contatos carregados?")) return;
+    setContactsList([]);
+    setManualText("");
+    setFileStats(null);
+    toast.info("Lista de destinatários limpa");
+    setActiveContactsDialogOpen(false);
+  };
+
+  // Funções de Visualização e Edição de Lista Salva
+  const handleOpenListDetails = async (listId: string) => {
+    setSelectedSavedListId(listId);
+    setListDetailsLoading(true);
+    setListDetailsModalOpen(true);
+    try {
+      const res = await fetch(`/api/contact-lists/${listId}`);
+      if (!res.ok) throw new Error("Falha ao carregar detalhes da lista");
+      const json = await res.json();
+      const list = json.data;
+      setEditingSavedListName(list.name || "");
+      setEditingSavedListContacts(Array.isArray(list.contacts) ? list.contacts : []);
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao carregar lista");
+    } finally {
+      setListDetailsLoading(false);
+    }
+  };
+
+  const handleSaveListChanges = async () => {
+    if (!selectedSavedListId) return;
+    if (!editingSavedListName.trim()) return toast.error("O nome da lista não pode ficar vazio");
+    if (editingSavedListContacts.length === 0) return toast.error("A lista precisa ter pelo menos 1 contato");
+
+    setSavingListChanges(true);
+    try {
+      const res = await fetch(`/api/contact-lists/${selectedSavedListId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editingSavedListName.trim(),
+          contacts: editingSavedListContacts,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Lista salva com sucesso!");
+        fetchSavedLists();
+        setListDetailsModalOpen(false);
+      } else {
+        const data = await res.json();
+        toast.error(data.message || "Erro ao salvar alterações da lista");
+      }
+    } catch (e: any) {
+      toast.error("Erro de conexão ao salvar alterações");
+    } finally {
+      setSavingListChanges(false);
+    }
+  };
+
+  const handleRemoveContactFromSavedList = (idxToRemove: number) => {
+    setEditingSavedListContacts((prev) => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
+  const handleUpdateContactInSavedList = (idx: number, newName: string, newPhone: string) => {
+    setEditingSavedListContacts((prev) => {
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        name: newName,
+        phone: newPhone,
+        variables: {
+          ...(updated[idx].variables || {}),
+          nome: newName,
+          telefone: newPhone,
+        },
+      };
+      return updated;
+    });
+  };
+
+  const handleAddContactToSavedList = () => {
+    if (!newSavedListContactPhone.trim()) return toast.error("Informe o telefone");
+    const sanitized = sanitizePhoneNumber(newSavedListContactPhone.trim());
+    if (!sanitized.isValid) return toast.error("Telefone inválido");
+
+    const newContact = {
+      phone: sanitized.phone,
+      name: newSavedListContactName.trim() || "",
+      variables: {
+        nome: newSavedListContactName.trim() || "",
+        primeiro_nome: (newSavedListContactName.trim() || "").split(" ")[0] || "",
+        telefone: sanitized.phone,
+      },
+    };
+
+    setEditingSavedListContacts((prev) => [...prev, newContact]);
+    setNewSavedListContactName("");
+    setNewSavedListContactPhone("");
+    toast.success("Contato adicionado à lista!");
   };
 
   // 10. Save Message as Template
@@ -1226,21 +1410,65 @@ export default function BroadcastPage() {
                       </div>
                     )}
 
-                    {/* Resumo & Ação de Salvar Lista */}
+                    {/* Resumo Rico, Visualização & Ação de Salvar Lista */}
                     {contactsList.length > 0 && (
-                      <div className="pt-2 border-t border-border/40 flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">
-                          {contactsList.length} prontos para envio
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => setSaveListDialogOpen(true)}
-                        >
-                          <Bookmark className="h-3 w-3 mr-1 text-primary" />
-                          Salvar como Lista
-                        </Button>
+                      <div className="pt-3 border-t border-border/40 space-y-2.5">
+                        <div className="p-3 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-primary text-primary-foreground font-mono text-xs px-2 py-0.5">
+                                {contactsList.length} contatos prontos
+                              </Badge>
+                              <span className="text-[11px] text-muted-foreground font-medium truncate max-w-[180px]">
+                                {fileStats?.name || "Lista carregada"}
+                              </span>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs border-primary/30 text-primary hover:bg-primary/10 font-semibold"
+                              onClick={() => setActiveContactsDialogOpen(true)}
+                            >
+                              <Eye className="h-3.5 w-3.5 mr-1" />
+                              Ver / Editar Lista ({contactsList.length})
+                            </Button>
+                          </div>
+
+                          {/* Prévia dos primeiros contatos */}
+                          <div className="text-[11px] text-muted-foreground flex flex-wrap gap-1.5 pt-1.5 border-t border-border/30">
+                            {contactsList.slice(0, 4).map((c, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-background/80 rounded border border-border/40 font-mono text-[10px]">
+                                {c.name ? `${c.name}: ` : ""}{c.phone}
+                              </span>
+                            ))}
+                            {contactsList.length > 4 && (
+                              <span className="px-1.5 py-0.5 text-[10px] text-muted-foreground font-semibold">
+                                +{contactsList.length - 4} outros...
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={handleClearAllActiveContacts}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Limpar Destinatários
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setSaveListDialogOpen(true)}
+                          >
+                            <Bookmark className="h-3 w-3 mr-1 text-primary" />
+                            Salvar como Lista
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -2134,7 +2362,7 @@ export default function BroadcastPage() {
                         Criada em {new Date(l.createdAt).toLocaleDateString("pt-BR")}
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="pt-2 flex gap-2">
+                    <CardContent className="pt-2 flex flex-wrap gap-2">
                       <Button
                         size="sm"
                         className="flex-1 text-xs h-8"
@@ -2144,7 +2372,17 @@ export default function BroadcastPage() {
                           setActiveTab("new");
                         }}
                       >
-                        Carregar Lista para Disparo
+                        Carregar p/ Disparo
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-8 px-2.5"
+                        onClick={() => handleOpenListDetails(l.id)}
+                        title="Ver e editar contatos desta lista"
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1 text-primary" />
+                        Ver / Editar
                       </Button>
                       <Button
                         variant="ghost"
@@ -2651,6 +2889,315 @@ export default function BroadcastPage() {
                 Bloquear Número
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* MODAL: VER E GERENCIAR CONTATOS DO DISPARO ATUAL */}
+        <Dialog open={activeContactsDialogOpen} onOpenChange={setActiveContactsDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <div className="flex items-center justify-between pr-6">
+                <div>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" />
+                    Destinatários do Disparo Atual
+                  </DialogTitle>
+                  <DialogDescription className="text-xs mt-1">
+                    {contactsList.length} contatos prontos para envio. Edite números, nomes ou remova os que não deseja contatar.
+                  </DialogDescription>
+                </div>
+                <Badge variant="outline" className="font-mono text-xs">
+                  {contactsList.length} contatos
+                </Badge>
+              </div>
+            </DialogHeader>
+
+            {/* Barra de Filtro e Adição Rápida */}
+            <div className="space-y-3 pt-2">
+              <div className="flex gap-2 items-center">
+                <Input
+                  placeholder="Buscar na lista por nome ou telefone..."
+                  value={activeContactsSearch}
+                  onChange={(e) => setActiveContactsSearch(e.target.value)}
+                  className="h-8 text-xs flex-1"
+                />
+              </div>
+
+              {/* Inclusão rápida */}
+              <div className="p-2.5 bg-muted/40 rounded-lg border border-border/40 flex flex-wrap gap-2 items-end">
+                <div className="flex-1 min-w-[140px] space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Nome (opcional):</Label>
+                  <Input
+                    placeholder="Ex: João Silva"
+                    value={newContactName}
+                    onChange={(e) => setNewContactName(e.target.value)}
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div className="flex-1 min-w-[140px] space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Telefone com DDD:</Label>
+                  <Input
+                    placeholder="Ex: 11999998888"
+                    value={newContactPhone}
+                    onChange={(e) => setNewContactPhone(e.target.value)}
+                    className="h-7 text-xs font-mono"
+                  />
+                </div>
+                <Button size="sm" className="h-7 text-xs" onClick={handleAddActiveContact}>
+                  <Plus className="h-3 w-3 mr-1" /> Adicionar
+                </Button>
+              </div>
+            </div>
+
+            {/* Tabela com scroll */}
+            <div className="flex-1 overflow-y-auto border border-border/60 rounded-lg mt-2 min-h-[220px] max-h-[360px]">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 sticky top-0 border-b border-border/40 text-muted-foreground">
+                  <tr>
+                    <th className="p-2 text-left w-10">#</th>
+                    <th className="p-2 text-left">Nome</th>
+                    <th className="p-2 text-left">Telefone</th>
+                    <th className="p-2 text-left">Detalhes / Imoview</th>
+                    <th className="p-2 text-center w-12">Remover</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {contactsList
+                    .filter((c) => {
+                      if (!activeContactsSearch.trim()) return true;
+                      const s = activeContactsSearch.toLowerCase();
+                      return (
+                        (c.name || "").toLowerCase().includes(s) ||
+                        (c.phone || "").toLowerCase().includes(s) ||
+                        (c.originalPhone || "").toLowerCase().includes(s)
+                      );
+                    })
+                    .map((c, idx) => (
+                      <tr key={idx} className="hover:bg-muted/20">
+                        <td className="p-2 font-mono text-[10px] text-muted-foreground">{idx + 1}</td>
+                        <td className="p-2">
+                          <Input
+                            value={c.name || ""}
+                            onChange={(e) => handleUpdateActiveContact(idx, e.target.value, c.phone || c.originalPhone)}
+                            placeholder="Nome..."
+                            className="h-7 text-xs font-medium"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            value={c.phone || c.originalPhone || ""}
+                            onChange={(e) => handleUpdateActiveContact(idx, c.name || "", e.target.value)}
+                            placeholder="Telefone..."
+                            className="h-7 text-xs font-mono"
+                          />
+                        </td>
+                        <td className="p-2 text-[11px] text-muted-foreground">
+                          {c.variables?.corretor && (
+                            <Badge variant="outline" className="text-[10px] mr-1">
+                              {c.variables.corretor}
+                            </Badge>
+                          )}
+                          {c.variables?.bairro && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {c.variables.bairro}
+                            </Badge>
+                          )}
+                          {!c.variables?.corretor && !c.variables?.bairro && (
+                            <span className="text-[10px] opacity-60">Direto</span>
+                          )}
+                        </td>
+                        <td className="p-2 text-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                            onClick={() => handleRemoveActiveContact(idx)}
+                            title="Remover este contato do disparo"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            <DialogFooter className="mt-3 flex items-center justify-between sm:justify-between">
+              <Button variant="ghost" size="sm" className="text-xs text-destructive hover:bg-destructive/10" onClick={handleClearAllActiveContacts}>
+                <Trash2 className="h-3 w-3 mr-1" /> Limpar Todos
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setSaveListDialogOpen(true)}>
+                  <Bookmark className="h-3.5 w-3.5 mr-1 text-primary" /> Salvar como Lista
+                </Button>
+                <Button size="sm" onClick={() => setActiveContactsDialogOpen(false)}>
+                  <Check className="h-3.5 w-3.5 mr-1" /> Concluir Edição
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* MODAL: VISUALIZAR E EDITAR LISTA SALVA */}
+        <Dialog open={listDetailsModalOpen} onOpenChange={setListDetailsModalOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <div className="flex items-center justify-between pr-6">
+                <div>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Bookmark className="h-5 w-5 text-primary" />
+                    Visualizar e Editar Lista Salva
+                  </DialogTitle>
+                  <DialogDescription className="text-xs mt-1">
+                    Edite os números ou nomes dos contatos gravados nesta lista.
+                  </DialogDescription>
+                </div>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {editingSavedListContacts.length} contatos
+                </Badge>
+              </div>
+            </DialogHeader>
+
+            {listDetailsLoading ? (
+              <div className="py-12 flex justify-center items-center">
+                <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3 pt-2">
+                  {/* Nome da Lista */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Nome da Lista:</Label>
+                    <Input
+                      value={editingSavedListName}
+                      onChange={(e) => setEditingSavedListName(e.target.value)}
+                      className="h-8 text-xs font-medium"
+                      placeholder="Nome da lista..."
+                    />
+                  </div>
+
+                  {/* Adicionar novo contato na lista salva */}
+                  <div className="p-2.5 bg-muted/40 rounded-lg border border-border/40 flex flex-wrap gap-2 items-end">
+                    <div className="flex-1 min-w-[140px] space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Nome (opcional):</Label>
+                      <Input
+                        placeholder="Ex: Maria Pereira"
+                        value={newSavedListContactName}
+                        onChange={(e) => setNewSavedListContactName(e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[140px] space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Telefone com DDD:</Label>
+                      <Input
+                        placeholder="Ex: 11988887777"
+                        value={newSavedListContactPhone}
+                        onChange={(e) => setNewSavedListContactPhone(e.target.value)}
+                        className="h-7 text-xs font-mono"
+                      />
+                    </div>
+                    <Button size="sm" className="h-7 text-xs" onClick={handleAddContactToSavedList}>
+                      <Plus className="h-3 w-3 mr-1" /> Adicionar à Lista
+                    </Button>
+                  </div>
+
+                  <Input
+                    placeholder="Filtrar contatos da lista..."
+                    value={editingSavedListSearch}
+                    onChange={(e) => setEditingSavedListSearch(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* Tabela de contatos da lista salva */}
+                <div className="flex-1 overflow-y-auto border border-border/60 rounded-lg mt-2 min-h-[220px] max-h-[340px]">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50 sticky top-0 border-b border-border/40 text-muted-foreground">
+                      <tr>
+                        <th className="p-2 text-left w-10">#</th>
+                        <th className="p-2 text-left">Nome</th>
+                        <th className="p-2 text-left">Telefone</th>
+                        <th className="p-2 text-center w-12">Remover</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {editingSavedListContacts
+                        .filter((c) => {
+                          if (!editingSavedListSearch.trim()) return true;
+                          const s = editingSavedListSearch.toLowerCase();
+                          return (
+                            (c.name || "").toLowerCase().includes(s) ||
+                            (c.phone || "").toLowerCase().includes(s)
+                          );
+                        })
+                        .map((c, idx) => (
+                          <tr key={idx} className="hover:bg-muted/20">
+                            <td className="p-2 font-mono text-[10px] text-muted-foreground">{idx + 1}</td>
+                            <td className="p-2">
+                              <Input
+                                value={c.name || ""}
+                                onChange={(e) => handleUpdateContactInSavedList(idx, e.target.value, c.phone)}
+                                placeholder="Nome..."
+                                className="h-7 text-xs font-medium"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                value={c.phone || ""}
+                                onChange={(e) => handleUpdateContactInSavedList(idx, c.name || "", e.target.value)}
+                                placeholder="Telefone..."
+                                className="h-7 text-xs font-mono"
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                onClick={() => handleRemoveContactFromSavedList(idx)}
+                                title="Remover contato desta lista"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <DialogFooter className="mt-3 flex items-center justify-between sm:justify-between">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      // Carrega os contatos para a tela de disparo direto do modal
+                      handleSelectSavedList(selectedSavedListId);
+                      setRecipientSource("list");
+                      setActiveTab("new");
+                      setListDetailsModalOpen(false);
+                      toast.success("Lista carregada na tela de disparo!");
+                    }}
+                  >
+                    <Send className="h-3.5 w-3.5 mr-1 text-primary" /> Carregar para Disparo
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setListDetailsModalOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button size="sm" onClick={handleSaveListChanges} disabled={savingListChanges}>
+                      {savingListChanges ? (
+                        <><RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" /> Salvando...</>
+                      ) : (
+                        <><Check className="h-3.5 w-3.5 mr-1" /> Salvar Alterações</>
+                      )}
+                    </Button>
+                  </div>
+                </DialogFooter>
+              </>
+            )}
           </DialogContent>
         </Dialog>
       </div>
