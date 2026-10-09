@@ -81,6 +81,9 @@ interface ImoviewProperty {
   tipo: string;
   finalidade: string;
   valor: string;
+  valorCondominio?: string;
+  valorIptu?: string;
+  nomeCondominio?: string;
   bairro: string;
   cidade: string;
   quartos?: string;
@@ -93,6 +96,7 @@ interface ImoviewProperty {
   corretorNome?: string;
   corretorId?: string;
   situacao?: string;
+  isRhemaProprio?: boolean;
 }
 
 interface MessageTemplate {
@@ -135,7 +139,7 @@ export default function ImoviewIntegrationPage() {
   const [hasSearchedProps, setHasSearchedProps] = useState(false);
   const abortPropsRef = useRef<AbortController | null>(null);
 
-  const [origemFiltro, setOrigemFiltro] = useState<"proprietarios" | "imoveis">("proprietarios");
+  const [origemFiltro, setOrigemFiltro] = useState<"proprietarios" | "imoveis" | "rhema">("proprietarios");
   const [corretorCaptadorFiltro, setCorretorCaptadorFiltro] = useState("");
   const [tipoImovelFiltro, setTipoImovelFiltro] = useState("");
   const [bairroFiltro, setBairroFiltro] = useState("");
@@ -591,7 +595,7 @@ export default function ImoviewIntegrationPage() {
       id: p.codigo,
       name: p.proprietarioNome || "Proprietário",
       phone: p.proprietarioTelefone,
-      extraInfo: `Cód. ${p.codigo} • ${p.tipo} em ${p.bairro} (${p.diasSemAtualizacao}d sem atualização)`,
+      extraInfo: `Cód. ${p.codigo} • ${p.tipo} em ${p.bairro}${p.valorCondominio ? ` • Cond: ${p.valorCondominio}` : ""}${p.valorIptu ? ` • IPTU: ${p.valorIptu}` : ""}${p.isRhemaProprio ? " • 🏢 Rhema" : ""}`,
       originalData: p,
     }));
 
@@ -687,6 +691,12 @@ export default function ImoviewIntegrationPage() {
             tipo_imovel: p.tipo,
             finalidade: p.finalidade,
             valor: p.valor,
+            condominio: p.valorCondominio || "",
+            valor_condominio: p.valorCondominio || "",
+            iptu: p.valorIptu || "",
+            valor_iptu: p.valorIptu || "",
+            nome_condominio: p.nomeCondominio || "",
+            is_rhema: p.isRhemaProprio ? "Sim" : "Não",
             bairro: p.bairro,
             cidade: p.cidade,
             quartos: p.quartos || "",
@@ -1033,7 +1043,7 @@ export default function ImoviewIntegrationPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Card className="p-3.5 border-border/60 shadow-xs bg-card">
                 <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
-                  <span>{origemFiltro === "proprietarios" ? "Proprietários no CRM" : "Imóveis no Catálogo"}</span>
+                  <span>{origemFiltro === "rhema" ? "🏢 Imóveis Próprios (Rhema)" : origemFiltro === "proprietarios" ? "Proprietários no CRM" : "Imóveis no Catálogo"}</span>
                   <Home className="h-3.5 w-3.5 text-primary" />
                 </div>
                 <div className="text-xl font-bold mt-1 text-foreground">{properties.length}</div>
@@ -1083,10 +1093,11 @@ export default function ImoviewIntegrationPage() {
                     <select
                       className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 font-semibold focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       value={origemFiltro}
-                      onChange={(e) => setOrigemFiltro(e.target.value as "proprietarios" | "imoveis")}
+                      onChange={(e) => setOrigemFiltro(e.target.value as "proprietarios" | "imoveis" | "rhema")}
                     >
                       <option value="proprietarios">Proprietários (Base CRM - WhatsApp)</option>
                       <option value="imoveis">Catálogo de Imóveis (Portfólio & Captações)</option>
+                      <option value="rhema">🏢 Imóveis da Rhema (Patrimônio / Próprios)</option>
                     </select>
                   </div>
 
@@ -1113,6 +1124,8 @@ export default function ImoviewIntegrationPage() {
                       ) : (
                         <>
                           <option value="">Todos os Corretores / Captadores</option>
+                          <option value="RHEMA">🏢 Imóveis Próprios (Rhema)</option>
+                          <option value="CAMILA">🎧 Camila (Pré-Vendas / Rhema)</option>
                           {brokers.map((b) => (
                             <option key={b.id} value={b.id}>
                               {b.nome}
@@ -1562,6 +1575,11 @@ export default function ImoviewIntegrationPage() {
                                   <div className="font-semibold text-foreground text-xs flex items-center gap-1.5">
                                     <span className="font-mono text-primary font-bold">#{prop.codigo}</span>
                                     <span>{prop.tipo}</span>
+                                    {prop.isRhemaProprio && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-emerald-500/40 text-emerald-600 bg-emerald-500/10 font-bold">
+                                        🏢 Rhema
+                                      </Badge>
+                                    )}
                                   </div>
                                   <div className="text-[11px] text-muted-foreground truncate max-w-xs">
                                     {prop.titulo}
@@ -1570,7 +1588,12 @@ export default function ImoviewIntegrationPage() {
                               </div>
                             </td>
                             <td className="p-3">
-                              {prop.corretorNome ? (
+                              {prop.isRhemaProprio ? (
+                                <div className="flex items-center gap-1.5 text-xs text-foreground font-semibold">
+                                  <Building2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                  <span>Rhema (Camila)</span>
+                                </div>
+                              ) : prop.corretorNome ? (
                                 <div className="flex items-center gap-1.5 text-xs text-foreground font-semibold">
                                   <UserCheck className="h-3.5 w-3.5 text-primary shrink-0" />
                                   <span>{prop.corretorNome}</span>
@@ -1597,9 +1620,31 @@ export default function ImoviewIntegrationPage() {
                               <div className="font-semibold text-emerald-600 dark:text-emerald-400">
                                 {prop.valor}
                               </div>
-                              <Badge variant="outline" className="text-[9px] mt-0.5">
-                                {prop.finalidade}
-                              </Badge>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <Badge variant="outline" className="text-[9px]">
+                                  {prop.finalidade}
+                                </Badge>
+                                {prop.isRhemaProprio && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-emerald-500/40 text-emerald-600 bg-emerald-500/10 font-bold">
+                                    Próprio
+                                  </Badge>
+                                )}
+                              </div>
+                              {(prop.valorCondominio || prop.valorIptu) && (
+                                <div className="text-[10px] text-muted-foreground mt-1 flex flex-col gap-0.5">
+                                  {prop.valorCondominio && (
+                                    <span className="font-medium text-foreground/80">
+                                      Cond: <span className="font-semibold text-foreground">{prop.valorCondominio}</span>
+                                      {prop.nomeCondominio && <span className="text-[9px] text-muted-foreground ml-1">({prop.nomeCondominio})</span>}
+                                    </span>
+                                  )}
+                                  {prop.valorIptu && (
+                                    <span className="font-medium text-foreground/80">
+                                      IPTU: <span className="font-semibold text-foreground">{prop.valorIptu}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </td>
                             <td className="p-3 text-center">
                               <Badge
@@ -1801,23 +1846,32 @@ export default function ImoviewIntegrationPage() {
                     <strong>2. Gestão de Proprietários:</strong> Filtra imóveis sem atualização cadastral há 30, 60 ou 90
                     dias para checar se o imóvel continua à venda/locação e se o preço foi alterado.
                   </p>
-                  <div className="bg-background p-2.5 rounded-lg border border-border/60 font-mono text-[11px] space-y-1">
-                    <div>
-                      <code className="text-primary font-bold">{"{{nome_proprietario}}"}</code>: Nome do dono do imóvel
+                    <div className="bg-background p-2.5 rounded-lg border border-border/60 font-mono text-[11px] space-y-1">
+                      <div>
+                        <code className="text-primary font-bold">{"{{nome_proprietario}}"}</code>: Nome do dono do imóvel
+                      </div>
+                      <div>
+                        <code className="text-primary font-bold">{"{{codigo_imovel}}"}</code>: Código cadastral no CRM
+                      </div>
+                      <div>
+                        <code className="text-primary font-bold">{"{{tipo_imovel}}"}</code>: Ex: Apartamento, Casa
+                      </div>
+                      <div>
+                        <code className="text-primary font-bold">{"{{valor}}"}</code>: Valor atual no Imoview
+                      </div>
+                      <div>
+                        <code className="text-emerald-600 dark:text-emerald-400 font-bold">{"{{condominio}}"}</code>: Valor do condomínio (ex: R$ 1.350,00)
+                      </div>
+                      <div>
+                        <code className="text-emerald-600 dark:text-emerald-400 font-bold">{"{{iptu}}"}</code>: Valor do IPTU (ex: R$ 480,00)
+                      </div>
+                      <div>
+                        <code className="text-primary font-bold">{"{{nome_condominio}}"}</code>: Nome do condomínio/edifício
+                      </div>
+                      <div>
+                        <code className="text-primary font-bold">{"{{bairro}}"}</code>: Bairro onde fica o imóvel
+                      </div>
                     </div>
-                    <div>
-                      <code className="text-primary font-bold">{"{{codigo_imovel}}"}</code>: Código cadastral no CRM
-                    </div>
-                    <div>
-                      <code className="text-primary font-bold">{"{{tipo_imovel}}"}</code>: Ex: Apartamento, Casa
-                    </div>
-                    <div>
-                      <code className="text-primary font-bold">{"{{valor}}"}</code>: Valor atual no Imoview
-                    </div>
-                    <div>
-                      <code className="text-primary font-bold">{"{{bairro}}"}</code>: Bairro onde fica o imóvel
-                    </div>
-                  </div>
                   <p>
                     <strong>3. Feedback no CRM:</strong> O histórico de envios e respostas alimenta diretamente a linha
                     do tempo do Imoview.

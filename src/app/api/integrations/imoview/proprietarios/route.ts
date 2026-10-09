@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const requestedCorretorId = searchParams.get("corretorId") || undefined;
     const termo = searchParams.get("termo") || undefined;
     const limite = parseInt(searchParams.get("limite") || "100", 10);
-    const origem = (searchParams.get("origem") as "proprietarios" | "imoveis") || "proprietarios";
+    const origem = (searchParams.get("origem") as "proprietarios" | "imoveis" | "rhema") || "proprietarios";
     const apenasComTelefone = searchParams.get("apenasComTelefone") === "true";
     const isExport = searchParams.get("export") === "true";
 

@@ -30,7 +30,9 @@ O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendim
 - [x] **Variáveis do Imóvel no Lead**: Extração inteligente de dados do imóvel associado (`{{codigo_imovel}}`, `{{tipo_imovel}}`, `{{bairro}}`, `{{cidade}}`, `{{valor}}`, `{{quartos}}`, `{{vagas}}`).
 - [x] **Módulo de Contato com Proprietários (Captação & Atualização)**:
   - Puxar via Imoview a lista de proprietários de imóveis ativos (`/dashboard/imoview`).
-  - Filtro para imóveis sem atualização há mais de 30, 60 ou 90 dias.
+  - Filtro para imóveis sem atualização há mais de 30, 60 ou 90 dias, além de intervalos customizados e datas específicas.
+  - **Suporte a Imóveis Próprios da Rhema (Patrimônio da Casa)**: Seleção dedicada de imóveis próprios da Rhema atualizados pela Camila (Pré-Vendas / Recepção), com isolamento de contatos e atribuição automática.
+  - **Variáveis de Condomínio e IPTU**: Extração de valores e nomes (`{{condominio}}`, `{{valor_condominio}}`, `{{iptu}}`, `{{valor_iptu}}`, `{{nome_condominio}}`) disponíveis como variáveis dinâmicas e chips de inserção rápida no disparador em massa.
   - Disparo em massa para confirmação de disponibilidade, preço e dados do imóvel.
   - Template de "Imóvel Vendido" para proprietários (notificação de fechamento e solicitação de novas captações).
 - [ ] **Automação de Status no Imoview**:

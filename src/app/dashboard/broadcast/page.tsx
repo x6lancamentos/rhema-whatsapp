@@ -442,12 +442,19 @@ export default function BroadcastPage() {
               "titulo_imovel",
               "finalidade",
               "valor",
+              "condominio",
+              "valor_condominio",
+              "iptu",
+              "valor_iptu",
+              "nome_condominio",
               "bairro",
               "cidade",
               "quartos",
               "vagas",
               "dias_sem_atualizacao",
-              "data_ultima_alteracao"
+              "data_ultima_alteracao",
+              "corretor_captador",
+              "is_rhema",
             ]);
             setFileStats({
               name: `Imoview CRM (${parsed.length} proprietários)`,
@@ -1750,6 +1757,33 @@ export default function BroadcastPage() {
                           + {"{Olá|Oi|Tudo bem}"}
                         </button>
                       </div>
+
+                      {/* Variáveis Dinâmicas da Base / Imoview / Planilha */}
+                      {detectedColumns && detectedColumns.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-border/30">
+                          <span className="text-[10px] text-muted-foreground font-semibold">Campos do Imóvel / Dados:</span>
+                          {detectedColumns
+                            .filter((col) => !["nome", "primeiro_nome", "telefone", "saudacao"].includes(col.toLowerCase()))
+                            .map((col) => {
+                              const isCondoOrIptu = ["condominio", "valor_condominio", "iptu", "valor_iptu", "nome_condominio"].includes(col.toLowerCase());
+                              return (
+                                <button
+                                  key={col}
+                                  type="button"
+                                  onClick={() => insertTextAtCursor(`{{${col}}}`)}
+                                  className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-medium transition-colors ${
+                                    isCondoOrIptu
+                                      ? "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
+                                      : "bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
+                                  }`}
+                                  title={`Inserir {{${col}}}`}
+                                >
+                                  + {`{{${col}}}`}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      )}
                     </div>
 
                     {/* Textarea Principal */}

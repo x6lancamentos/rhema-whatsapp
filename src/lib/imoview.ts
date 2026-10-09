@@ -36,6 +36,9 @@ export interface ImoviewProperty {
   tipo: string;
   finalidade: string;
   valor: string;
+  valorCondominio?: string;
+  valorIptu?: string;
+  nomeCondominio?: string;
   bairro: string;
   cidade: string;
   quartos?: string;
@@ -48,6 +51,7 @@ export interface ImoviewProperty {
   corretorNome?: string;
   corretorId?: string;
   situacao?: string;
+  isRhemaProprio?: boolean;
 }
 
 export async function getImoviewConfig() {
@@ -370,7 +374,7 @@ export async function fetchImoviewProperties(options: {
   situacao?: string;
   corretorId?: string;
   termo?: string;
-  origem?: "proprietarios" | "imoveis";
+  origem?: "proprietarios" | "imoveis" | "rhema";
   somenteComTelefone?: boolean;
 }): Promise<ImoviewProperty[]> {
   const config = await getImoviewConfig();
@@ -391,11 +395,16 @@ export async function fetchImoviewProperties(options: {
   for (const b of brokers) {
     brokerMap.set(b.id, b.nome);
   }
+  brokerMap.set("RHEMA", "Rhema Imóveis (Imóveis Próprios)");
+  brokerMap.set("CAMILA", "Camila (Pré-Vendas / Rhema)");
 
   const allProperties: ImoviewProperty[] = [];
   const now = Date.now();
-  // Se corretorId for informado, a busca de captações no Imoview se dá via catálogo de Imóveis (codigocaptador)
-  const origem = options.corretorId ? "imoveis" : (options.origem || "proprietarios");
+
+  const isRhemaFilter = options.origem === "rhema" || options.corretorId === "RHEMA" || options.corretorId === "CAMILA";
+
+  // Se corretorId for informado ou se origem for rhema, busca via catálogo de Imóveis
+  const origem = isRhemaFilter ? "imoveis" : (options.corretorId ? "imoveis" : (options.origem || "proprietarios"));
 
   if (origem === "proprietarios") {
     // Tipos de relacionamento no Imoview:
@@ -500,7 +509,7 @@ export async function fetchImoviewProperties(options: {
       }
     }
   } else {
-    // Origem === "imoveis" (Catálogo de Imóveis & Captações)
+    // Origem === "imoveis" ou "rhema" (Catálogo de Imóveis & Captações)
     const finalidades = options.finalidade && options.finalidade !== "0"
       ? [options.finalidade]
       : ["2", "1"];
@@ -516,8 +525,8 @@ export async function fetchImoviewProperties(options: {
             finalidade: fin,
           };
 
-          // Filtro por corretor captador se informado
-          if (options.corretorId) {
+          // Filtro por corretor captador se informado e numérico
+          if (options.corretorId && !isNaN(Number(options.corretorId))) {
             bodyPayload.codigocaptador = Number(options.corretorId);
           }
 
@@ -567,9 +576,19 @@ export async function fetchImoviewProperties(options: {
               continue;
             }
 
+            // Identificação de imóvel pertencente à Rhema
+            const isRhemaUnit = (item.nomeunidade && String(item.nomeunidade).toLowerCase().includes("rhema")) || String(item.unidade) === "9238";
+            const hasNoExternalOwner = !item.proprietarios || !Array.isArray(item.proprietarios) || item.proprietarios.length === 0;
+            const isRhemaProprio = isRhemaUnit || hasNoExternalOwner;
+
+            // Se o usuário solicitou especificamente filtrar imóveis da Rhema
+            if (isRhemaFilter && !isRhemaProprio) {
+              continue;
+            }
+
             const brokerNome = options.corretorId
               ? brokerMap.get(options.corretorId)
-              : undefined;
+              : (isRhemaProprio ? "Rhema Imóveis (Camila)" : undefined);
 
             if (options.termo) {
               const q = options.termo.toLowerCase();
@@ -579,20 +598,21 @@ export async function fetchImoviewProperties(options: {
                 (item.bairro || "").toLowerCase().includes(q) ||
                 (item.cidade || "").toLowerCase().includes(q) ||
                 (item.tipo || "").toLowerCase().includes(q) ||
-                (brokerNome && brokerNome.toLowerCase().includes(q));
+                (brokerNome && brokerNome.toLowerCase().includes(q)) ||
+                (isRhemaProprio && "rhema".includes(q));
               if (!match) continue;
             }
 
-            const propNome = (
+            let propNome = (
               item.proprietarios?.[0]?.nome ||
               item.proprietarios?.[0]?.proprietario ||
               item.nomeproprietario ||
               item.proprietario ||
               item.contatonome ||
-              "Proprietário"
+              ""
             ).trim();
 
-            const rawPhone = (
+            let rawPhone = (
               item.proprietarios?.[0]?.celular ||
               item.proprietarios?.[0]?.telefone ||
               item.telefoneproprietario ||
@@ -602,6 +622,19 @@ export async function fetchImoviewProperties(options: {
               ""
             ).trim();
 
+            // Se for imóvel próprio da Rhema ou não possui proprietário externo cadastrado:
+            if (isRhemaProprio) {
+              if (!propNome) {
+                propNome = "Rhema Imóveis (Patrimônio / Próprio)";
+              }
+              if (!rawPhone || rawPhone.replace(/\D/g, "").length < 8) {
+                // Atribui o telefone da unidade Rhema para que a Camila possa atualizar e contatar
+                rawPhone = (item.telefoneunidade || "(13) 3227-0909").trim();
+              }
+            } else if (!propNome) {
+              propNome = "Proprietário";
+            }
+
             if (options.somenteComTelefone && (!rawPhone || rawPhone.replace(/\D/g, "").length < 8)) {
               continue;
             }
@@ -610,12 +643,28 @@ export async function fetchImoviewProperties(options: {
               ? (typeof item.valor === "number" ? `R$ ${item.valor.toLocaleString("pt-BR")}` : String(item.valor))
               : "Sob Consulta";
 
+            // Formatação de Condomínio e IPTU
+            const formatarMoeda = (val: any) => {
+              if (!val) return undefined;
+              if (typeof val === "number") return `R$ ${val.toLocaleString("pt-BR")}`;
+              const s = String(val).trim();
+              if (s === "0" || s === "R$ 0,00" || s === "R$ 0" || s === "") return undefined;
+              return s;
+            };
+
+            const formattedCondominio = formatarMoeda(item.valorcondominio);
+            const formattedIptu = formatarMoeda(item.valoriptu);
+            const nomeCond = item.nomecondominio ? String(item.nomecondominio).trim() : undefined;
+
             allProperties.push({
               codigo: String(item.codigo),
               titulo: item.titulo || `${item.tipo || "Imóvel"} em ${item.bairro || "Santos"}`,
               tipo: item.tipo || "Imóvel",
               finalidade: item.finalidade === "2" || item.finalidade === 2 ? "Venda" : "Locação",
               valor: formattedValor,
+              valorCondominio: formattedCondominio,
+              valorIptu: formattedIptu,
+              nomeCondominio: nomeCond,
               bairro: item.bairro || "",
               cidade: item.cidade || "",
               quartos: item.numeroquartos != null ? String(item.numeroquartos) : undefined,
@@ -628,6 +677,7 @@ export async function fetchImoviewProperties(options: {
               corretorId: options.corretorId || undefined,
               corretorNome: brokerNome || (item.captadores?.[0]?.nome || undefined),
               situacao: item.situacao || undefined,
+              isRhemaProprio,
             });
 
             if (allProperties.length >= maxLimit) break;
