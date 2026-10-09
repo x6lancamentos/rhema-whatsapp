@@ -36,3 +36,14 @@ jobs:
           docker push "$REPO:latest"
           docker push "$REPO:sha-$SHORT_SHA"
           docker push "$REPO:sha-${{ github.sha }}"
+
+      - name: Trigger Coolify Deployment
+        if: success()
+        run: |
+          echo "Disparando deploy automatico no Coolify..."
+          AUTH_HEADER=""
+          if [ -n "${{ secrets.COOLIFY_API_TOKEN }}" ]; then
+            AUTH_HEADER="-H \"Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}\""
+          fi
+          RESPONSE=$(curl -s -X POST $AUTH_HEADER "http://187.77.253.192:8000/api/v1/deploy?uuid=1ij90irxxipwjyc02embrwhs&force=false" || true)
+          echo "Coolify response: $RESPONSE"
