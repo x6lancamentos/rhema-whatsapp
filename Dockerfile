@@ -1,1 +1,1 @@
-FROM ghcr.io/x6lancamentos/rhema-whatsapp:sha-83b2302
+FROM ghcr.io/x6lancamentos/rhema-whatsapp:sha-57a9887
