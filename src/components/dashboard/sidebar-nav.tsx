@@ -222,21 +222,21 @@ function NavLink({ item, active, isCollapsed }: { item: NavItem; active: boolean
             href={item.href}
             target={item.external ? "_blank" : undefined}
             className={`
-                flex items-center rounded-lg text-sm font-medium
+                flex items-center rounded-xl text-sm font-medium
                 transition-all duration-200 group relative
                 ${isCollapsed ? "justify-center px-2 py-2.5 mx-1" : "gap-3 px-3 py-2"}
                 ${active
-                    ? "text-primary bg-primary/10 shadow-sm"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    ? "text-primary dark:text-emerald-300 bg-primary/10 dark:bg-primary/15 font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:bg-muted/60 dark:hover:bg-muted/40 hover:text-foreground"
                 }
             `}
         >
             {active && !isCollapsed && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3.5px] h-5 bg-primary rounded-r-full shadow-[0_0_8px_1px_rgba(16,185,129,0.7)]" />
             )}
             <Icon
                 size={isCollapsed ? 20 : 17}
-                className={`flex-shrink-0 transition-colors duration-200 ${active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground"}`}
+                className={`flex-shrink-0 transition-colors duration-200 ${active ? "text-primary dark:text-emerald-400" : "text-muted-foreground/70 group-hover:text-foreground"}`}
             />
             {!isCollapsed && <span className="truncate">{item.label}</span>}
         </Link>

@@ -114,13 +114,13 @@ export function MobileNav({ appName = "WA-AKG" }: { appName?: string }) {
                     <Menu className="h-5 w-5" />
                 </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-[85vw] sm:w-[320px] p-0 flex flex-col">
-                <SheetHeader className="px-5 py-4 text-left border-b border-slate-100">
-                    <SheetTitle className="text-xl font-bold text-slate-800">{appName}</SheetTitle>
-                    <SheetDescription className="text-[11px] text-slate-400 -mt-1">WhatsApp Gateway</SheetDescription>
+            <SheetContent side="left" className="w-[85vw] sm:w-[320px] p-0 flex flex-col bg-background/95 backdrop-blur-2xl border-r border-border/60">
+                <SheetHeader className="px-5 py-4 text-left border-b border-border/60">
+                    <SheetTitle className="text-xl font-bold text-foreground">{appName}</SheetTitle>
+                    <SheetDescription className="text-[11px] text-muted-foreground -mt-1">WhatsApp Gateway</SheetDescription>
                 </SheetHeader>
 
-                <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-1">
+                <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-1 styled-scrollbar">
                     {navGroups.map((group) => {
                         const visibleItems = group.items.filter(
                             (item) => !item.superadminOnly || userRole === "SUPERADMIN"
@@ -130,7 +130,7 @@ export function MobileNav({ appName = "WA-AKG" }: { appName?: string }) {
                         return (
                             <div key={group.label} className="mb-1">
                                 {group.label !== "Main" && (
-                                    <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                    <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
                                         {group.label}
                                     </p>
                                 )}
@@ -188,7 +188,7 @@ export function MobileNav({ appName = "WA-AKG" }: { appName?: string }) {
                     >
                         <LogOut size={14} /> Sign Out
                     </Button>
-                    <p className="text-[10px] text-slate-300 text-center mt-2 font-mono">v{pkg.version}</p>
+                    <p className="text-[10px] text-muted-foreground/60 text-center mt-2 font-mono">v{pkg.version}</p>
                 </div>
             </SheetContent>
         </Sheet>
