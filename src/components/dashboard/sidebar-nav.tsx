@@ -31,6 +31,8 @@ import {
     Building2,
 } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
+import { useLanguage } from "@/components/language-provider";
+import { TranslationKey } from "@/lib/i18n/translations";
 import {
     Tooltip,
     TooltipContent,
@@ -40,12 +42,14 @@ import {
 
 interface NavGroup {
     label: string;
+    labelKey: TranslationKey;
     items: NavItem[];
 }
 
 interface NavItem {
     href: string;
     label: string;
+    labelKey: TranslationKey;
     icon: React.ElementType;
     external?: boolean;
     superadminOnly?: boolean;
@@ -55,55 +59,61 @@ interface NavItem {
 const navGroups: NavGroup[] = [
     {
         label: "Main",
+        labelKey: "nav.group.main",
         items: [
-            { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-            { href: "/dashboard/sessions", label: "Sessions / QR", icon: QrCode },
+            { href: "/dashboard", label: "Dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+            { href: "/dashboard/sessions", label: "Sessions / QR", labelKey: "nav.sessions", icon: QrCode },
         ],
     },
     {
         label: "Messaging",
+        labelKey: "nav.group.messaging",
         items: [
-            { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-            { href: "/dashboard/broadcast", label: "Broadcast", icon: Megaphone },
-            { href: "/dashboard/templates", label: "Modelos", icon: FileText },
-            { href: "/dashboard/imoview", label: "Imoview CRM", icon: Building2 },
-            { href: "/dashboard/sticker", label: "Sticker Maker", icon: ImageIcon },
+            { href: "/dashboard/chat", label: "Chat", labelKey: "nav.chat", icon: MessageSquare },
+            { href: "/dashboard/broadcast", label: "Broadcast", labelKey: "nav.broadcast", icon: Megaphone },
+            { href: "/dashboard/templates", label: "Modelos", labelKey: "nav.templates", icon: FileText },
+            { href: "/dashboard/imoview", label: "Imoview CRM", labelKey: "nav.imoview", icon: Building2 },
+            { href: "/dashboard/sticker", label: "Sticker Maker", labelKey: "nav.sticker", icon: ImageIcon },
         ],
     },
     {
         label: "Contacts",
+        labelKey: "nav.group.contacts",
         items: [
-            { href: "/dashboard/contacts", label: "Contacts", icon: UserCheck },
-            { href: "/dashboard/groups", label: "Groups", icon: Users },
-            { href: "/dashboard/labels", label: "Labels", icon: Tag },
+            { href: "/dashboard/contacts", label: "Contacts", labelKey: "nav.contacts", icon: UserCheck },
+            { href: "/dashboard/groups", label: "Groups", labelKey: "nav.groups", icon: Users },
+            { href: "/dashboard/labels", label: "Labels", labelKey: "nav.labels", icon: Tag },
         ],
     },
     {
         label: "Automation",
+        labelKey: "nav.group.automation",
         items: [
-            { href: "/dashboard/bot-settings", label: "Bot Settings", icon: Bot },
-            { href: "/dashboard/autoreply", label: "Auto Reply", icon: MessageCircleReply },
-            { href: "/dashboard/profile", label: "Bot Profile", icon: UserCircle },
-            { href: "/dashboard/scheduler", label: "Scheduler", icon: CalendarClock },
-            { href: "/dashboard/webhooks", label: "Webhooks & API", icon: Webhook },
+            { href: "/dashboard/bot-settings", label: "Bot Settings", labelKey: "nav.bot_settings", icon: Bot },
+            { href: "/dashboard/autoreply", label: "Auto Reply", labelKey: "nav.autoreply", icon: MessageCircleReply },
+            { href: "/dashboard/profile", label: "Bot Profile", labelKey: "nav.profile", icon: UserCircle },
+            { href: "/dashboard/scheduler", label: "Scheduler", labelKey: "nav.scheduler", icon: CalendarClock },
+            { href: "/dashboard/webhooks", label: "Webhooks & API", labelKey: "nav.webhooks", icon: Webhook },
         ],
     },
     {
         label: "Developer",
+        labelKey: "nav.group.developer",
         items: [
-            { href: "/docs", label: "API Docs", icon: FileText },
-            { href: "/swagger", label: "Swagger UI", icon: Code, external: true },
+            { href: "/docs", label: "API Docs", labelKey: "nav.docs", icon: FileText },
+            { href: "/swagger", label: "Swagger UI", labelKey: "nav.swagger", icon: Code, external: true },
         ],
     },
     {
         label: "Administration",
+        labelKey: "nav.group.administration",
         items: [
-            { href: "/dashboard/media", label: "Media Manager", icon: HardDrive },
-            { href: "/dashboard/sessions/access", label: "Session Access", icon: UserPlus },
-            { href: "/dashboard/users", label: "Equipe & Permissões", icon: Users, allowedRoles: ["SUPERADMIN", "ADMIN", "OWNER"] },
-            { href: "/dashboard/settings", label: "Settings", icon: Settings },
-            { href: "/dashboard/system-monitor", label: "System Monitor", icon: Activity, superadminOnly: true },
-            { href: "/dashboard/notifications", label: "Notifications", icon: Bell, superadminOnly: true },
+            { href: "/dashboard/media", label: "Media Manager", labelKey: "nav.media", icon: HardDrive },
+            { href: "/dashboard/sessions/access", label: "Session Access", labelKey: "nav.session_access", icon: UserPlus },
+            { href: "/dashboard/users", label: "Equipe & Permissões", labelKey: "nav.team", icon: Users, allowedRoles: ["SUPERADMIN", "ADMIN", "OWNER"] },
+            { href: "/dashboard/settings", label: "Settings", labelKey: "nav.settings", icon: Settings },
+            { href: "/dashboard/system-monitor", label: "System Monitor", labelKey: "nav.system_monitor", icon: Activity, superadminOnly: true },
+            { href: "/dashboard/notifications", label: "Notifications", labelKey: "nav.notifications", icon: Bell, superadminOnly: true },
         ],
     },
 ];
@@ -112,6 +122,7 @@ export function SidebarNav() {
     const pathname = usePathname();
     const { data: session } = useSession();
     const { isCollapsed, toggleCollapse } = useSidebar();
+    const { t } = useLanguage();
     // @ts-ignore
     const userRole = session?.user?.role;
 
@@ -164,7 +175,7 @@ export function SidebarNav() {
                                     onClick={() => toggleGroup(group.label)}
                                     className="flex items-center justify-between w-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 hover:text-foreground/80 transition-colors group"
                                 >
-                                    {group.label}
+                                    {t(group.labelKey)}
                                     <ChevronDown
                                         size={12}
                                         className={`transition-transform duration-200 ${isGroupCollapsed ? "-rotate-90" : ""}`}
@@ -205,7 +216,7 @@ export function SidebarNav() {
                     ) : (
                         <>
                             <PanelLeftClose size={16} />
-                            <span>Collapse</span>
+                            <span>{t("nav.collapse")}</span>
                         </>
                     )}
                 </button>
@@ -216,6 +227,8 @@ export function SidebarNav() {
 
 function NavLink({ item, active, isCollapsed }: { item: NavItem; active: boolean; isCollapsed: boolean }) {
     const Icon = item.icon;
+    const { t } = useLanguage();
+    const label = t(item.labelKey);
 
     const linkContent = (
         <Link
@@ -238,7 +251,7 @@ function NavLink({ item, active, isCollapsed }: { item: NavItem; active: boolean
                 size={isCollapsed ? 20 : 17}
                 className={`flex-shrink-0 transition-colors duration-200 ${active ? "text-primary dark:text-emerald-400" : "text-muted-foreground/70 group-hover:text-foreground"}`}
             />
-            {!isCollapsed && <span className="truncate">{item.label}</span>}
+            {!isCollapsed && <span className="truncate">{label}</span>}
         </Link>
     );
 
@@ -249,7 +262,7 @@ function NavLink({ item, active, isCollapsed }: { item: NavItem; active: boolean
                     {linkContent}
                 </TooltipTrigger>
                 <TooltipContent side="right" sideOffset={8}>
-                    <p className="text-xs font-medium">{item.label}</p>
+                    <p className="text-xs font-medium">{label}</p>
                 </TooltipContent>
             </Tooltip>
         );

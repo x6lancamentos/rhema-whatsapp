@@ -2,6 +2,7 @@
 
 import { SidebarNav } from "./sidebar-nav";
 import { useSidebar } from "./sidebar-context";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
@@ -16,6 +17,7 @@ interface SidebarShellProps {
 
 export function SidebarShell({ appName, logoUrl, userName, userEmail, version }: SidebarShellProps) {
     const { isCollapsed } = useSidebar();
+    const { t } = useLanguage();
 
     return (
         <aside
@@ -78,7 +80,7 @@ export function SidebarShell({ appName, logoUrl, userName, userEmail, version }:
                         <button
                             onClick={() => signOut({ callbackUrl: "/auth/login" })}
                             className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            title="Sair da conta"
+                            title={t("common.sign_out")}
                         >
                             <LogOut size={16} />
                         </button>
@@ -103,7 +105,7 @@ export function SidebarShell({ appName, logoUrl, userName, userEmail, version }:
                             className="w-full flex items-center justify-center gap-2 text-xs h-7.5 rounded-lg border-border/50 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors"
                             onClick={() => signOut({ callbackUrl: "/auth/login" })}
                         >
-                            <LogOut size={13} /> Sair
+                            <LogOut size={13} /> {t("common.sign_out")}
                         </Button>
                         <p className="text-[9px] text-muted-foreground/50 text-center font-mono">v{version}</p>
                     </div>

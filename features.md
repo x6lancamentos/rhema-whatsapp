@@ -116,13 +116,15 @@ O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendim
 
 ---
 
-## 7. 🇧🇷 Internacionalização (PT-BR) & Interface (UI/UX)
+## 7. 🌐 Internacionalização (PT-BR / EN) & Interface (UI/UX)
 
-- [x] **Dark Mode Polido**: Adaptação visual consistente em todas as telas, cards e componentes.
+- [x] **Dark Mode Polido & Design System Premium**: Adaptação visual consistente em todas as telas, cards e componentes com gradientes sutis, glassmorphism e microinterações.
 - [x] **Barra de Rolagem Moderna (Sleek Scrollbar)**: Scrollbar fina, estilizada e integrada ao tema escuro.
-- [ ] **Tradução Integral para Português (PT-BR)**:
-  - Traduzir todos os botões, cabeçalhos, diálogos, tabelas e mensagens de sistema ainda em inglês (*"Manage Sessions"*, *"Pending Queue"*, *"Create Session"*, *"Drop files here"*, etc.).
-- [ ] **Padrão Numérico e Monetário do Brasil**:
+- [x] **Modo Bilíngue Dinâmico (PT-BR e EN)**:
+  - Seletor interativo de idiomas no Header (dropdown e pill toggle com bandeiras `🇧🇷 PT` e `🇺🇸 EN`).
+  - `LanguageProvider` com persistência em `localStorage` e padrão em Português do Brasil (`pt-BR`).
+  - Tradução em tempo real de navegação lateral, grupos, cabeçalhos, ações rápidas, métricas, sessões e popovers.
+- [x] **Padrão Numérico e Monetário do Brasil**:
   - Formatação nativa de moeda (`R$ 1.250.000,00`) e datas por extenso em português.
 
 ---

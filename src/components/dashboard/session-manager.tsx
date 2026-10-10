@@ -20,6 +20,8 @@ import {
     TableRow,
 } from "@/components/ui/table";
 
+import { useLanguage } from '@/components/language-provider';
+
 type Session = {
     id: string;
     name: string;
@@ -33,6 +35,7 @@ type Session = {
 };
 
 export function SessionManager({ user }: { user: any }) {
+    const { t } = useLanguage();
     const [sessions, setSessions] = useState<Session[]>([]);
     const [newSessionName, setNewSessionName] = useState("");
     const [newSessionId, setNewSessionId] = useState("");
@@ -134,37 +137,37 @@ export function SessionManager({ user }: { user: any }) {
             <Card className="bg-muted/30 dark:bg-card/80 border-dashed border-2 border-border/80 shadow-xs">
                 <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2 text-foreground font-bold">
-                        <Plus className="h-5 w-5 text-primary" /> Create New Session
+                        <Plus className="h-5 w-5 text-primary" /> {t("sessions.create_title")}
                     </CardTitle>
                     <CardDescription className="text-muted-foreground">
-                        Add a new WhatsApp account to manage.
+                        {t("sessions.create_desc")}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                         <div className="space-y-2">
-                            <Label htmlFor="session-name" className="text-xs font-semibold text-foreground">Session Name</Label>
+                            <Label htmlFor="session-name" className="text-xs font-semibold text-foreground">{t("sessions.name_label")}</Label>
                             <Input
                                 id="session-name"
                                 value={newSessionName}
                                 onChange={e => setNewSessionName(e.target.value)}
-                                placeholder="My Business WA"
+                                placeholder={t("sessions.name_placeholder")}
                                 className="bg-background text-foreground border-border"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="session-id" className="text-xs font-semibold text-foreground">Custom Session ID (Optional)</Label>
+                            <Label htmlFor="session-id" className="text-xs font-semibold text-foreground">{t("sessions.id_label")}</Label>
                             <Input
                                 id="session-id"
                                 value={newSessionId}
                                 onChange={e => setNewSessionId(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
-                                placeholder="unique-id-123"
+                                placeholder={t("sessions.id_placeholder")}
                                 className="bg-background text-foreground border-border"
                             />
-                            <p className="text-[10px] text-muted-foreground">Only letters, numbers, hyphens.</p>
+                            <p className="text-[10px] text-muted-foreground">{t("sessions.id_help")}</p>
                         </div>
                         <Button onClick={createSession} disabled={loading} className="w-full">
-                            {loading ? 'Creating...' : 'Create Session'}
+                            {loading ? t("sessions.creating") : t("sessions.create_btn")}
                         </Button>
                     </div>
                 </CardContent>
@@ -174,26 +177,26 @@ export function SessionManager({ user }: { user: any }) {
             <div>
                 {sessions.length === 0 ? (
                     <div className="text-center py-10 text-muted-foreground bg-muted/20 dark:bg-card/40 rounded-lg border border-border/50">
-                        No sessions found. Create one above to get started.
+                        {t("dashboard.no_sessions")}
                     </div>
                 ) : (
                     <Card className="glass-panel border-border/50 shadow-sm overflow-hidden">
                         <CardHeader className="pb-3 pt-5 px-5">
                             <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
-                                Active Sessions ({sessions.length})
+                                {t("sessions.active_title")} ({sessions.length})
                             </CardTitle>
                             <CardDescription>
-                                List of active WhatsApp sessions and their current connection status.
+                                {t("sessions.active_desc")}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="p-0 overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow className="hover:bg-transparent">
-                                        <TableHead className="px-5 text-xs uppercase tracking-wider font-semibold">Session / Device</TableHead>
-                                        <TableHead className="text-xs uppercase tracking-wider font-semibold">Status</TableHead>
-                                        <TableHead className="text-xs uppercase tracking-wider font-semibold">Owner</TableHead>
-                                        <TableHead className="text-right px-5 text-xs uppercase tracking-wider font-semibold">Actions</TableHead>
+                                        <TableHead className="px-5 text-xs uppercase tracking-wider font-semibold">{t("sessions.th_device")}</TableHead>
+                                        <TableHead className="text-xs uppercase tracking-wider font-semibold">{t("sessions.th_status")}</TableHead>
+                                        <TableHead className="text-xs uppercase tracking-wider font-semibold">{t("sessions.th_owner")}</TableHead>
+                                        <TableHead className="text-right px-5 text-xs uppercase tracking-wider font-semibold">{t("sessions.th_actions")}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -221,8 +224,8 @@ export function SessionManager({ user }: { user: any }) {
                                             <TableCell className="py-3">
                                                 {session.user ? (
                                                     <div className="leading-tight">
-                                                        <div className="font-semibold text-slate-700 dark:text-slate-300 text-xs">{session.user.name || "No Name"}</div>
-                                                        <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{session.user.email}</div>
+                                                        <div className="font-semibold text-foreground text-xs">{session.user.name || "No Name"}</div>
+                                                        <div className="text-[10px] text-muted-foreground mt-0.5">{session.user.email}</div>
                                                     </div>
                                                 ) : (
                                                     <span className="text-xs text-muted-foreground/50">-</span>
@@ -236,7 +239,7 @@ export function SessionManager({ user }: { user: any }) {
                                                         className="h-8 px-2.5 text-xs rounded-lg hover:bg-primary/5 transition-colors border-border/50"
                                                         onClick={() => router.push(`/dashboard/sessions/access?session=${session.sessionId}`)}
                                                     >
-                                                        <UserPlus className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" /> Share
+                                                        <UserPlus className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" /> {t("sessions.btn_share")}
                                                     </Button>
                                                     <Button 
                                                         variant="outline" 
@@ -244,7 +247,7 @@ export function SessionManager({ user }: { user: any }) {
                                                         className="h-8 px-2.5 text-xs rounded-lg hover:bg-primary/5 transition-colors border-border/50"
                                                         onClick={() => handleManageSession(session.sessionId)}
                                                     >
-                                                        <Settings className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" /> Manage
+                                                        <Settings className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" /> {t("sessions.btn_manage")}
                                                     </Button>
                                                 </div>
                                             </TableCell>

@@ -13,6 +13,8 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { io, Socket } from "socket.io-client";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageToggle } from "@/components/language-toggle";
+import { useLanguage } from "@/components/language-provider";
 
 interface NavbarProps {
     appName?: string;
@@ -31,6 +33,7 @@ interface Notification {
 export function Navbar({ appName }: NavbarProps) {
     const router = useRouter();
     const { data: session } = useSession();
+    const { t } = useLanguage();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
@@ -149,6 +152,7 @@ export function Navbar({ appName }: NavbarProps) {
                 <SessionSelector />
                 <div className="h-6 w-px bg-border/50 hidden sm:block" />
 
+                <LanguageToggle variant="dropdown" />
                 <ThemeToggle variant="dropdown" />
 
                 <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -163,18 +167,18 @@ export function Navbar({ appName }: NavbarProps) {
                     <PopoverContent className="w-80 p-0 rounded-2xl border border-border/50 shadow-2xl glass-panel" align="end">
                         <div className="p-4 border-b border-border/50 flex justify-between items-center bg-background/50">
                             <div>
-                                <h4 className="font-semibold leading-none text-foreground">Notifications</h4>
+                                <h4 className="font-semibold leading-none text-foreground">{t("navbar.notifications")}</h4>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    {unreadCount > 0 ? `You have ${unreadCount} unread updates.` : "No new notifications."}
+                                    {unreadCount > 0 ? t("navbar.unread_count", { count: unreadCount }) : t("navbar.no_notifications")}
                                 </p>
                             </div>
                             <div className="flex items-center gap-1">
                                 <Button variant="ghost" size="sm" className="h-auto py-1 px-2 text-xs" onClick={() => { router.push("/dashboard/inbox"); setIsOpen(false); }}>
-                                    See all
+                                    {t("navbar.see_all")}
                                 </Button>
                                 {unreadCount > 0 && (
                                     <Button variant="ghost" size="sm" onClick={() => markAsRead()} className="h-auto py-1 px-2 text-xs">
-                                        Mark all read
+                                        {t("navbar.mark_all_read")}
                                     </Button>
                                 )}
                             </div>
@@ -185,8 +189,8 @@ export function Navbar({ appName }: NavbarProps) {
                                     <div className="bg-muted dark:bg-card p-3 rounded-full mb-3 border border-border/50">
                                         <Inbox className="h-6 w-6 text-muted-foreground" />
                                     </div>
-                                    <p className="text-sm font-medium">No new notifications</p>
-                                    <p className="text-xs text-muted-foreground max-w-[180px]">We'll notify you when something important arrives.</p>
+                                    <p className="text-sm font-medium">{t("navbar.empty_notifications")}</p>
+                                    <p className="text-xs text-muted-foreground max-w-[180px]">{t("navbar.empty_notifications_desc")}</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-border">

@@ -1,12 +1,13 @@
 import { auth } from "@/lib/auth";
 import { SessionManager } from "@/components/dashboard/session-manager";
+import { SessionsHeader } from "@/components/dashboard/sessions-header";
 
 export default async function SessionsPage() {
     const session = await auth();
 
     return (
         <div>
-            <h1 className="text-2xl font-bold mb-6">Manage Sessions</h1>
+            <SessionsHeader />
             <SessionManager user={session?.user} />
         </div>
     );
