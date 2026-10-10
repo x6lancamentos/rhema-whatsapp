@@ -501,4 +501,39 @@ model ImoviewConfig {
   updatedAt             DateTime @updatedAt
 }
 
+// Cached / Linked Imoview Context for Contacts (Zero redundant API calls, permanent historical records)
+model ImoviewContactContext {
+  id                  String   @id @default(cuid())
+  phone               String   @unique // Normalizado (apenas digitos): ex. 5513999998888 ou 13999998888
+  jid                 String?  // WhatsApp remoteJid (ex. 5513999998888@s.whatsapp.net)
+  tipoRelacionamento  String   @default("proprietario") // proprietario, lead, imovel_proprio
+  nome                String?
+  codigoImovel        String?
+  tituloImovel        String?
+  tipoImovel          String?
+  finalidade          String?
+  valor               String?
+  valorCondominio     String?  // Valor Condominio
+  valorIptu           String?  // Valor IPTU
+  nomeCondominio      String?
+  bairro              String?
+  cidade              String?
+  quartos             String?
+  vagas               String?
+  corretorId          String?
+  corretorNome        String?
+  diasSemContato      Int?     @default(0)
+  ultimoHistorico     String?  @db.Text
+  fotoPrincipal       String?  @db.Text
+  isRhemaProprio      Boolean  @default(false)
+  dadosCompletos      Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([phone])
+  @@index([jid])
+  @@index([codigoImovel])
+  @@index([corretorId])
+}
+
 

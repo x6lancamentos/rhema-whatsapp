@@ -17,8 +17,10 @@ import {
   Copy,
   Trash2,
   Info,
-  X
+  X,
+  Building2,
 } from "lucide-react";
+import { ImoviewContextPanel } from "./imoview-context-panel";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
@@ -280,6 +282,24 @@ export function ChatWindow({ sessionId, jid, name, onBack, onSelectChat }: ChatW
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+  // Imoview Context Panel state
+  const [showImoviewPanel, setShowImoviewPanel] = useState(false);
+  const [hasImoviewContext, setHasImoviewContext] = useState(false);
+
+  useEffect(() => {
+    if (!jid) return;
+    fetch(`/api/integrations/imoview/context?jid=${encodeURIComponent(jid)}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.status && json.data) {
+          setHasImoviewContext(true);
+        } else {
+          setHasImoviewContext(false);
+        }
+      })
+      .catch(() => setHasImoviewContext(false));
+  }, [jid]);
 
   const { getSocket, joinSession } = useSocket();
   const getDateLabel = useDateLabel();
@@ -561,31 +581,58 @@ export function ChatWindow({ sessionId, jid, name, onBack, onSelectChat }: ChatW
       )}
 
       {/* Header */}
-      <div className="shrink-0 px-3 py-2.5 border-b bg-background/80 backdrop-blur-sm flex items-center gap-3 z-10">
-        {onBack && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 md:hidden shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={onBack}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        )}
-        <Avatar className="h-9 w-9 shrink-0">
-          <AvatarFallback className="text-xs font-medium bg-gradient-to-br from-primary/20 to-emerald-500/20 text-primary font-semibold">
-            {displayName.slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-foreground truncate">{displayName}</h3>
-          <p className="text-[10px] text-muted-foreground font-mono truncate">{friendlySubtitle}</p>
+      <div className="shrink-0 px-3 py-2.5 border-b bg-background/80 backdrop-blur-sm flex items-center justify-between gap-3 z-10">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 md:hidden shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
+          <Avatar className="h-9 w-9 shrink-0">
+            <AvatarFallback className="text-xs font-medium bg-gradient-to-br from-primary/20 to-emerald-500/20 text-primary font-semibold">
+              {displayName.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-foreground truncate">{displayName}</h3>
+            <p className="text-[10px] text-muted-foreground font-mono truncate">{friendlySubtitle}</p>
+          </div>
         </div>
+
+        {/* Imoview Context Toggle Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-8 gap-1.5 text-xs font-semibold px-2.5 rounded-lg border transition-all shrink-0 cursor-pointer",
+            showImoviewPanel
+              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 shadow-xs"
+              : hasImoviewContext
+              ? "bg-emerald-500/8 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/15"
+              : "text-muted-foreground hover:text-foreground border-border/40 hover:bg-muted/50"
+          )}
+          onClick={() => setShowImoviewPanel((prev) => !prev)}
+          title="Abrir Painel Lateral de Contexto do Imoview"
+        >
+          <Building2 className="h-3.5 w-3.5 text-emerald-500" />
+          <span className="hidden sm:inline">Imoview</span>
+          {hasImoviewContext && (
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          )}
+        </Button>
       </div>
 
-      {/* Messages */}
-      <div
-        ref={scrollRef}
+      {/* Main Chat Body & Lateral Panel Container */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+          {/* Messages */}
+          <div
+            ref={scrollRef}
         className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 min-h-0 styled-scrollbar"
         onScroll={handleScroll}
         style={{
@@ -984,5 +1031,16 @@ export function ChatWindow({ sessionId, jid, name, onBack, onSelectChat }: ChatW
         </div>
       </div>
     </div>
+
+    {/* Imoview Lateral Context Panel */}
+    <ImoviewContextPanel
+      jid={jid}
+      contactName={displayName}
+      isOpen={showImoviewPanel}
+      onClose={() => setShowImoviewPanel(false)}
+      onInsertMessage={(text) => setInput((prev) => (prev ? prev + "\n" + text : text))}
+    />
+  </div>
+</div>
   );
 }

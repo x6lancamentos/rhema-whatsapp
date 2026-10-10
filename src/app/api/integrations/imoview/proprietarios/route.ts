@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser, canUser } from "@/lib/api-auth";
 import { fetchImoviewProperties, getImoviewConfig } from "@/lib/imoview";
+import { upsertImoviewPropertiesContext } from "@/lib/imoview-context";
 
 // GET: Fetch properties and owner contacts from Imoview
 export async function GET(request: NextRequest) {
@@ -88,6 +89,13 @@ export async function GET(request: NextRequest) {
       origem,
       somenteComTelefone: apenasComTelefone,
     });
+
+    // Salvar assincronamente no cache local para acesso instantaneo no Chat sem custo de API
+    if (properties.length > 0) {
+      upsertImoviewPropertiesContext(properties).catch((err) => {
+        console.error("Erro ao salvar cache de proprietários no banco:", err);
+      });
+    }
 
     return NextResponse.json({
       status: true,

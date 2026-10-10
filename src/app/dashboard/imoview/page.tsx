@@ -137,6 +137,8 @@ export default function ImoviewIntegrationPage() {
   const [selectedPropertyCodes, setSelectedPropertyCodes] = useState<string[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
   const [hasSearchedProps, setHasSearchedProps] = useState(false);
+  const [cachePropsTimestamp, setCachePropsTimestamp] = useState<number | null>(null);
+  const [cacheLeadsTimestamp, setCacheLeadsTimestamp] = useState<number | null>(null);
   const abortPropsRef = useRef<AbortController | null>(null);
 
   const [origemFiltro, setOrigemFiltro] = useState<"proprietarios" | "imoveis" | "rhema">("proprietarios");
@@ -253,6 +255,17 @@ export default function ImoviewIntegrationPage() {
         const data = json.data || [];
         setLeads(data);
         setSelectedLeadIds(data.map((l: ImoviewLead) => l.atendimentoId));
+        setCacheLeadsTimestamp(Date.now());
+        try {
+          localStorage.setItem("rhema_cached_imoview_leads", JSON.stringify({
+            timestamp: Date.now(),
+            data,
+            filters: {
+              diasFiltroLeads,
+              corretorFiltro,
+            }
+          }));
+        } catch {}
         if (json.restrictedToBroker !== undefined) {
           setRestrictedToBroker(json.restrictedToBroker);
         }
@@ -314,6 +327,30 @@ export default function ImoviewIntegrationPage() {
         const json = await res.json();
         const data = json.data || [];
         setProperties(data);
+        setCachePropsTimestamp(Date.now());
+        try {
+          localStorage.setItem("rhema_cached_imoview_properties", JSON.stringify({
+            timestamp: Date.now(),
+            data,
+            filters: {
+              origemFiltro,
+              limiteFiltroProps,
+              apenasComTelefoneFiltro,
+              periodoModo,
+              diasFiltroProps,
+              diasMinimosCustom,
+              diasMaximosCustom,
+              dataInicioCustom,
+              dataFimCustom,
+              finalidadeFiltro,
+              corretorCaptadorFiltro,
+              tipoImovelFiltro,
+              bairroFiltro,
+              situacaoFiltro,
+              searchPropTerm,
+            }
+          }));
+        } catch {}
         if (json.restrictedToBroker !== undefined) {
           setRestrictedToBroker(json.restrictedToBroker);
         }
@@ -388,8 +425,55 @@ export default function ImoviewIntegrationPage() {
     setLimiteFiltroProps(100);
     setApenasComTelefoneFiltro(true);
     setSearchPropTerm("");
+    try {
+      localStorage.removeItem("rhema_cached_imoview_properties");
+    } catch {}
+    setCachePropsTimestamp(null);
     toast.info("Filtros redefinidos");
   };
+
+  // Restaurar dados carregados anteriormente para não precisar refazer requisição
+  useEffect(() => {
+    try {
+      const cachedPropsStr = localStorage.getItem("rhema_cached_imoview_properties");
+      if (cachedPropsStr) {
+        const cached = JSON.parse(cachedPropsStr);
+        if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
+          setProperties(cached.data);
+          setHasSearchedProps(true);
+          setCachePropsTimestamp(cached.timestamp);
+          const withPhones = cached.data
+            .filter((p: ImoviewProperty) => p.proprietarioTelefone && p.proprietarioTelefone.replace(/\D/g, "").length >= 8)
+            .map((p: ImoviewProperty) => p.codigo);
+          setSelectedPropertyCodes(withPhones);
+
+          if (cached.filters) {
+            if (cached.filters.origemFiltro) setOrigemFiltro(cached.filters.origemFiltro);
+            if (cached.filters.limiteFiltroProps) setLimiteFiltroProps(cached.filters.limiteFiltroProps);
+            if (cached.filters.apenasComTelefoneFiltro !== undefined) setApenasComTelefoneFiltro(cached.filters.apenasComTelefoneFiltro);
+            if (cached.filters.periodoModo) setPeriodoModo(cached.filters.periodoModo);
+            if (cached.filters.diasFiltroProps !== undefined) setDiasFiltroProps(cached.filters.diasFiltroProps);
+            if (cached.filters.finalidadeFiltro) setFinalidadeFiltro(cached.filters.finalidadeFiltro);
+            if (cached.filters.corretorCaptadorFiltro) setCorretorCaptadorFiltro(cached.filters.corretorCaptadorFiltro);
+            if (cached.filters.bairroFiltro) setBairroFiltro(cached.filters.bairroFiltro);
+            if (cached.filters.searchPropTerm) setSearchPropTerm(cached.filters.searchPropTerm);
+          }
+        }
+      }
+
+      const cachedLeadsStr = localStorage.getItem("rhema_cached_imoview_leads");
+      if (cachedLeadsStr) {
+        const cached = JSON.parse(cachedLeadsStr);
+        if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
+          setLeads(cached.data);
+          setSelectedLeadIds(cached.data.map((l: ImoviewLead) => l.atendimentoId));
+          setCacheLeadsTimestamp(cached.timestamp);
+        }
+      }
+    } catch {
+      // Ignora erro de JSON
+    }
+  }, []);
 
   useEffect(() => {
     fetchConfig();
@@ -399,12 +483,12 @@ export default function ImoviewIntegrationPage() {
 
   useEffect(() => {
     if (connectionStatus === "connected") {
-      if (activeTab === "resgate" && leads.length === 0) {
+      if (activeTab === "resgate" && leads.length === 0 && !cacheLeadsTimestamp) {
         fetchLeads();
       }
       // NOTA: fetchProperties() NÃO é chamado automaticamente ao entrar na aba! O usuário tem controle manual.
     }
-  }, [activeTab, connectionStatus, fetchLeads, leads.length]);
+  }, [activeTab, connectionStatus, fetchLeads, leads.length, cacheLeadsTimestamp]);
 
   // Save Config
   const handleSaveConfig = async () => {
@@ -1475,6 +1559,36 @@ export default function ImoviewIntegrationPage() {
                   </Button>
                 </div>
               </Card>
+            )}
+
+            {/* Banner de Dados Restaurados do Cache Local (Zero requisições consumidas) */}
+            {!propertiesLoading && cachePropsTimestamp && properties.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-foreground shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <div>
+                    <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                      ⚡ {properties.length} registros restaurados da memória persistente
+                    </span>
+                    <span className="text-muted-foreground ml-1.5">
+                      (consulta realizada há {Math.max(1, Math.round((Date.now() - cachePropsTimestamp) / 60000))} min). Zero requisições à API do Imoview consumidas!
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    try { localStorage.removeItem("rhema_cached_imoview_properties"); } catch {}
+                    setCachePropsTimestamp(null);
+                    fetchProperties();
+                  }}
+                  className="h-7 text-xs font-semibold gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15 cursor-pointer shrink-0"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Atualizar da API do Imoview
+                </Button>
+              </div>
             )}
 
             {/* Empty State Inicial: Antes da primeira busca */}

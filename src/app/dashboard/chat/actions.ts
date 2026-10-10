@@ -43,14 +43,45 @@ export async function getChatMessages(
     const canAccess = await canAccessSession(user.id, user.role, sessionId);
     if (!canAccess) throw new Error("Forbidden");
 
-    const session = await prisma.session.findUnique({
-        where: { sessionId },
-        select: { id: true }
-    });
+    const session = sessionId && sessionId !== "audit"
+        ? await prisma.session.findUnique({
+            where: { sessionId },
+            select: { id: true }
+          })
+        : null;
 
-    if (!session) throw new Error("Session not found");
+    let messages: any[] = [];
+    let hasMore = false;
 
-    const { messages, hasMore } = await ChatService.getMessages(session.id, jid, limit, before);
+    if (session) {
+        const res = await ChatService.getMessages(session.id, jid, limit, before);
+        messages = res.messages;
+        hasMore = res.hasMore;
+    }
+
+    // Se nenhuma mensagem foi encontrada na sessão do corretor logado e o usuário for SUPERADMIN,
+    // carrega o arquivo permanente de mensagens do lead de campanha da imobiliária Rhema!
+    if (messages.length === 0 && user.role === "SUPERADMIN") {
+        const isCampaignLead = await prisma.broadcastRecipient.findFirst({
+            where: { jid },
+            select: { id: true }
+        });
+
+        if (isCampaignLead) {
+            const auditMsgs = await prisma.message.findMany({
+                where: {
+                    remoteJid: jid,
+                    ...(before ? { timestamp: { lt: new Date(before) } } : {})
+                },
+                orderBy: { timestamp: "desc" },
+                take: limit + 1
+            });
+
+            hasMore = auditMsgs.length > limit;
+            if (hasMore) auditMsgs.pop();
+            messages = auditMsgs.reverse();
+        }
+    }
 
     return {
         messages: messages.map((msg: any) => ({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser, canUser } from "@/lib/api-auth";
 import { fetchImoviewStalledLeads, getImoviewConfig } from "@/lib/imoview";
+import { upsertImoviewLeadsContext } from "@/lib/imoview-context";
 
 // GET: Fetch stalled leads from Imoview for reactivation
 export async function GET(request: NextRequest) {
@@ -71,6 +72,13 @@ export async function GET(request: NextRequest) {
       statusId,
       limite,
     });
+
+    // Salvar assincronamente no cache local para acesso instantaneo no Chat sem custo de API
+    if (leads.length > 0) {
+      upsertImoviewLeadsContext(leads).catch((err) => {
+        console.error("Erro ao salvar cache de leads no banco:", err);
+      });
+    }
 
     return NextResponse.json({
       status: true,

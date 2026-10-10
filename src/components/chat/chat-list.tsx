@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquarePlus, Search, MessageCircle, X, Tag, MoreHorizontal, CornerUpLeft, Trash2, Info, Check } from "lucide-react";
+import { MessageSquarePlus, Search, MessageCircle, X, Tag, MoreHorizontal, CornerUpLeft, Trash2, Info, Check, Shield, Users } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,7 @@ interface ChatListProps {
     sessionId: string;
     onSelectChat: (jid: string, name?: string) => void;
     selectedJid?: string;
+    userRole?: string;
 }
 
 const PAGE_SIZE = parseInt(process.env.NEXT_PUBLIC_CHAT_PAGE_SIZE || "50", 10);
@@ -281,7 +282,7 @@ function SkeletonRow() {
 }
 
 // ─── Main ──────────────────────────
-export function ChatList({ sessionId, onSelectChat, selectedJid }: ChatListProps) {
+export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: ChatListProps) {
     const [chats, setChats] = useState<ChatContact[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchInput, setSearchInput] = useState("");
@@ -291,6 +292,33 @@ export function ChatList({ sessionId, onSelectChat, selectedJid }: ChatListProps
     const [hasMore, setHasMore] = useState(true);
     // Label dots per JID — {colorHex}[]
     const [chatLabelMap, setChatLabelMap] = useState<Map<string, {colorHex: string}[]>>(new Map());
+
+    // Superadmin Audit Mode state
+    const isSuperadmin = userRole === "SUPERADMIN";
+    const [viewMode, setViewMode] = useState<"session" | "audit">("session");
+    const [auditLeads, setAuditLeads] = useState<any[]>([]);
+    const [auditLoading, setAuditLoading] = useState(false);
+
+    const fetchAuditLeads = useCallback(async () => {
+        setAuditLoading(true);
+        try {
+            const res = await fetch(`/api/chat/superadmin/campaign-leads?search=${encodeURIComponent(searchQuery)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setAuditLeads(data.data || []);
+            }
+        } catch (e) {
+            console.error("Failed to fetch audit leads:", e);
+        } finally {
+            setAuditLoading(false);
+        }
+    }, [searchQuery]);
+
+    useEffect(() => {
+        if (viewMode === "audit") {
+            fetchAuditLeads();
+        }
+    }, [viewMode, fetchAuditLeads]);
 
     const { getSocket, joinSession } = useSocket();
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -443,26 +471,61 @@ export function ChatList({ sessionId, onSelectChat, selectedJid }: ChatListProps
         <div className="flex flex-col h-full overflow-hidden bg-background">
             {/* Header */}
             <div className="shrink-0 px-3 pt-3 pb-2 space-y-2 border-b border-border/10">
+                {isSuperadmin && (
+                    <div className="flex p-0.5 bg-muted/60 rounded-lg border border-border/30 text-xs font-medium">
+                        <button
+                            onClick={() => setViewMode("session")}
+                            className={cn(
+                                "flex-1 py-1 px-2 rounded-md transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer text-xs",
+                                viewMode === "session"
+                                    ? "bg-background text-foreground font-semibold shadow-xs"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            <MessageCircle className="h-3.5 w-3.5" />
+                            <span>Meu WhatsApp</span>
+                        </button>
+                        <button
+                            onClick={() => setViewMode("audit")}
+                            className={cn(
+                                "flex-1 py-1 px-2 rounded-md transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer text-xs",
+                                viewMode === "audit"
+                                    ? "bg-background text-emerald-600 dark:text-emerald-400 font-semibold shadow-xs"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            <Shield className="h-3.5 w-3.5 text-emerald-500" />
+                            <span>Auditoria Leads</span>
+                        </button>
+                    </div>
+                )}
+
                 <div className="flex justify-between items-center">
                     <h3 className="font-semibold text-base text-foreground">
-                        Conversas
-                        {chats.length > 0 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">({chats.length})</span>}
+                        {viewMode === "audit" ? "Leads de Campanhas" : "Conversas"}
+                        {viewMode === "audit" ? (
+                            auditLeads.length > 0 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">({auditLeads.length})</span>
+                        ) : (
+                            chats.length > 0 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">({chats.length})</span>
+                        )}
                     </h3>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg"
-                        title="Nova conversa"
-                        onClick={() => setIsNewChatOpen(!isNewChatOpen)}>
-                        {isNewChatOpen ? <X className="h-4 w-4" /> : <MessageSquarePlus className="h-4 w-4" />}
-                    </Button>
+                    {viewMode === "session" && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg"
+                            title="Nova conversa"
+                            onClick={() => setIsNewChatOpen(!isNewChatOpen)}>
+                            {isNewChatOpen ? <X className="h-4 w-4" /> : <MessageSquarePlus className="h-4 w-4" />}
+                        </Button>
+                    )}
                 </div>
 
                 <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input placeholder="Buscar conversas..." value={searchInput}
+                    <Input placeholder={viewMode === "audit" ? "Buscar por lead, telefone ou corretor..." : "Buscar conversas..."} value={searchInput}
                         onChange={(e) => handleSearchChange(e.target.value)}
                         className="h-8 pl-8 text-sm bg-muted/50 border-0 rounded-lg focus-visible:ring-1" />
                 </div>
 
-                {isNewChatOpen && (
+                {isNewChatOpen && viewMode === "session" && (
                     <div className="p-2.5 bg-muted/30 rounded-lg space-y-2 border border-border/40">
                         <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Número de WhatsApp (com DDD)</Label>
                         <div className="flex gap-1.5">
@@ -476,9 +539,67 @@ export function ChatList({ sessionId, onSelectChat, selectedJid }: ChatListProps
                 )}
             </div>
 
-            {/* Chat list */}
+            {/* Chat list or Audit list */}
             <div className="flex-1 min-h-0">
-                {filteredChats.length === 0 ? (
+                {viewMode === "audit" ? (
+                    auditLoading ? (
+                        <div className="p-3 space-y-3">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                                <SkeletonRow key={i} />
+                            ))}
+                        </div>
+                    ) : auditLeads.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                            <div className="h-12 w-12 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-3">
+                                <Shield className="h-6 w-6" />
+                            </div>
+                            <p className="text-sm font-semibold text-foreground">Nenhum Lead de Disparo</p>
+                            <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">
+                                Apenas contatos que receberam disparos de campanhas aparecem na auditoria do gestor.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="h-full overflow-y-auto styled-scrollbar">
+                            {auditLeads.map((lead) => (
+                                <div
+                                    key={lead.jid}
+                                    onClick={() => onSelectChat(lead.jid, lead.name)}
+                                    className={cn(
+                                        "relative w-full flex items-start gap-3 px-3 py-2.5 transition-colors border-b border-border/10 cursor-pointer",
+                                        selectedJid === lead.jid
+                                            ? "bg-primary/8 border-l-2 border-l-primary"
+                                            : "hover:bg-muted/40 border-l-2 border-l-transparent"
+                                    )}
+                                >
+                                    <Avatar className="h-9 w-9 shrink-0 mt-0.5">
+                                        <AvatarFallback className="text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                            {lead.name.slice(0, 2).toUpperCase()}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-1">
+                                            <h4 className={cn("text-xs truncate", selectedJid === lead.jid ? "font-bold text-primary" : "font-semibold text-foreground")}>
+                                                {lead.name}
+                                            </h4>
+                                            <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                                                {getTimeLabel(lead.lastMessage?.timestamp || lead.sentAt)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 truncate max-w-[120px]">
+                                                {lead.corretorNome}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground truncate">{lead.campaignName}</span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground truncate mt-1">
+                                            {lead.lastMessage?.content || "Disparo enviado pela imobiliária"}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )
+                ) : filteredChats.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
                         <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
                             <MessageCircle className="h-6 w-6 text-muted-foreground/50" />

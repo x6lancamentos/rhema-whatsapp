@@ -44,6 +44,7 @@ export default async function ChatWithJidPage({
                 key={`${validSessionId}-${resolvedJid}`}
                 sessionId={validSessionId}
                 initialJid={resolvedJid}
+                userRole={session.user.role}
             />
         </div>
     );

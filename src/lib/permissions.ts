@@ -33,7 +33,8 @@ export type PermissionKey =
   | "users.view"
   | "users.manage"
   | "users.manage_permissions"
-  | "reports.view_team_productivity";
+  | "reports.view_team_productivity"
+  | "chat.superadmin_audit";
 
 export interface PermissionDefinition {
   key: PermissionKey;
@@ -180,6 +181,12 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: "Acompanhar métricas de envio, conversão e atividade de cada corretor.",
     category: "management",
   },
+  {
+    key: "chat.superadmin_audit",
+    label: "Auditoria de Leads de Campanhas (Superadmin)",
+    description: "Permite ao gerente/superadmin auditar conversas de leads originados de disparos da plataforma para QA e follow-up.",
+    category: "management",
+  },
 ];
 
 // Default configurations per role
@@ -205,6 +212,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage": true,
     "users.manage_permissions": true,
     "reports.view_team_productivity": true,
+    "chat.superadmin_audit": true,
   },
   ADMIN: {
     "whatsapp.view_sessions": true,
@@ -227,6 +235,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage": true,
     "users.manage_permissions": true,
     "reports.view_team_productivity": true,
+    "chat.superadmin_audit": false,
   },
   OWNER: {
     "whatsapp.view_sessions": true,
@@ -249,6 +258,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage": true,
     "users.manage_permissions": true,
     "reports.view_team_productivity": true,
+    "chat.superadmin_audit": false,
   },
   PRE_VENDAS: {
     // Camila (Pré-Vendas / Recepção):
@@ -273,6 +283,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage": false,
     "users.manage_permissions": false,
     "reports.view_team_productivity": false,
+    "chat.superadmin_audit": false,
   },
   CORRETOR: {
     // Corretor:
@@ -297,6 +308,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage": false,
     "users.manage_permissions": false,
     "reports.view_team_productivity": false,
+    "chat.superadmin_audit": false,
   },
   STAFF: {
     "whatsapp.view_sessions": true,
@@ -319,6 +331,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage": false,
     "users.manage_permissions": false,
     "reports.view_team_productivity": false,
+    "chat.superadmin_audit": false,
   },
 };
 
