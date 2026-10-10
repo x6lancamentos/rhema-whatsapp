@@ -53,11 +53,30 @@ Caso precise de algum ajuste de horário ou rota, é só nos responder por aqui!
   {
     name: "Confirmação de Disponibilidade & Valor (Proprietário)",
     category: "Proprietários",
-    content: `Olá {{nome_proprietario}}, tudo bem? Aqui é da Rhema Imóveis a respeito do seu imóvel cód. {{codigo_imovel}} ({{tipo_imovel}} em {{bairro}}).
+    content: `{Olá|Oi} {{nome_proprietario}}, tudo bem? Aqui é da Rhema Imóveis a respeito do seu imóvel cód. {{codigo_imovel}} ({{tipo_imovel}} em {{bairro}}).
 
 Estamos atualizando nossa base ativa para direcionar novos compradores e locatários qualificados.
 
-O imóvel ainda está disponível para {venda|locação}? O valor pretendido continua sendo {{valor}}?`,
+Gostaria de confirmar se o imóvel continua disponível para negociação e se os valores permanecem atualizados:
+💰 *Valor:* {{valor}}
+🏢 *Condomínio:* {{condominio}}
+📄 *IPTU:* {{iptu}}
+
+Podemos confirmar estas informações?`,
+  },
+  {
+    name: "Atualização Cadastral & Taxas (Condomínio e IPTU)",
+    category: "Proprietários",
+    content: `{Olá|Oi} {{nome_proprietario}}, tudo bem? Aqui é da Rhema Imóveis.
+
+Estamos revisando o cadastro do seu imóvel cód. {{codigo_imovel}} ({{tipo_imovel}} no {{bairro}}).
+
+Para mantermos as informações 100% corretas para apresentação a clientes e propostas, você poderia nos confirmar os valores atuais de:
+🏢 *Condomínio:* {{condominio}}
+📄 *IPTU:* {{iptu}}
+💰 *Valor pedido:* {{valor}}
+
+Houve alguma alteração recente nestes valores?`,
   },
   {
     name: "Aviso de Proposta / Imóvel Vendido (Proprietário)",

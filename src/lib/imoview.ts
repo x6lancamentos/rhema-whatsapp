@@ -375,6 +375,43 @@ export async function recordImoviewInteraction(
   return false;
 }
 
+// Helper to parse address into Bairro and Cidade from Brazilian formatted strings
+export function parseAddressInfo(endereco?: string): { bairro: string; cidade: string } {
+  if (!endereco) return { bairro: "", cidade: "Santos" };
+  const trimmed = endereco.trim();
+  const lastDashIdx = trimmed.lastIndexOf("-");
+  if (lastDashIdx !== -1) {
+    const beforeDash = trimmed.substring(0, lastDashIdx).trim();
+    const afterDash = trimmed.substring(lastDashIdx + 1).trim();
+
+    const lastCommaIdx = beforeDash.lastIndexOf(",");
+    const b = lastCommaIdx !== -1 ? beforeDash.substring(lastCommaIdx + 1).trim() : beforeDash;
+    const c = afterDash.split("/")[0].trim() || "Santos";
+
+    return {
+      bairro: b,
+      cidade: c,
+    };
+  }
+  return { bairro: "", cidade: "Santos" };
+}
+
+// Helper to format currency values cleanly
+export function formatarMoeda(val: any): string | undefined {
+  if (val == null) return undefined;
+  if (typeof val === "number") {
+    if (val === 0) return undefined;
+    return `R$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  const s = String(val).trim();
+  if (s === "0" || s === "R$ 0,00" || s === "R$ 0" || s === "") return undefined;
+  if (!s.startsWith("R$") && !isNaN(Number(s.replace(",", ".")))) {
+    const n = Number(s.replace(",", "."));
+    return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return s;
+}
+
 export async function fetchImoviewProperties(options: {
   diasSemAtualizacao?: number;
   diasMaximos?: number;
@@ -434,7 +471,7 @@ export async function fetchImoviewProperties(options: {
 
     for (const tipoRel of tiposRel) {
       if (allProperties.length >= maxLimit) break;
-      const pagesToFetch = Math.min(25, Math.ceil((maxLimit - allProperties.length) / 20) + 1);
+      const pagesToFetch = Math.min(15, Math.ceil((maxLimit - allProperties.length) / 20) + 1);
 
       for (let page = 1; page <= pagesToFetch; page++) {
         if (allProperties.length >= maxLimit) break;
@@ -444,6 +481,7 @@ export async function fetchImoviewProperties(options: {
           u.searchParams.set("numeroPagina", String(page));
           u.searchParams.set("numeroRegistros", "20"); // Imoview limit is strictly 20!
           u.searchParams.set("tipoRelacionamento", String(tipoRel));
+          u.searchParams.set("ordenacao", "-2"); // Priorizar cadastros ativos e recentes
 
           const res = await fetch(u.toString(), {
             method: "GET",
@@ -457,7 +495,59 @@ export async function fetchImoviewProperties(options: {
             break;
           }
 
-          for (const item of data.lista) {
+          // Buscar dados do imóvel de cada proprietário em paralelo para resgatar Bairro, IPTU e Condomínio
+          const clientProperties = await Promise.all(
+            data.lista.map(async (clientItem: any) => {
+              const endpoint = tipoRel === 6 ? "/Vendedor/RetornarImoveis" : "/Locador/RetornarImoveis";
+              const uProp = new URL(`${cleanBase}${endpoint}`);
+              uProp.searchParams.set("numeroPagina", "1");
+              uProp.searchParams.set("numeroRegistros", "1");
+              uProp.searchParams.set("codigoCliente", String(clientItem.codigo));
+
+              let imovelItem: any = null;
+              try {
+                const rProp = await fetch(uProp.toString(), { method: "GET", headers });
+                if (rProp.ok) {
+                  const dProp = await rProp.json();
+                  imovelItem = dProp.lista?.[0] || null;
+                }
+              } catch {
+                // Silenciosamente tolera falha de imóvel individual
+              }
+
+              let valorIptu: string | undefined = undefined;
+              let nomeCondominio: string | undefined = undefined;
+
+              // Se o imóvel foi encontrado, tentar recuperar IPTU e Nome do Condomínio
+              if (imovelItem?.codigo) {
+                try {
+                  const uDet = new URL(`${cleanBase}/Imovel/RetornarDetalhesImovelDisponivel`);
+                  uDet.searchParams.set("codigoImovel", String(imovelItem.codigo));
+                  const rDet = await fetch(uDet.toString(), { method: "GET", headers });
+                  if (rDet.ok) {
+                    const dDet = await rDet.json();
+                    if (dDet.imovel?.valoriptu) {
+                      valorIptu = formatarMoeda(dDet.imovel.valoriptu);
+                    }
+                    if (dDet.imovel?.nomecondominio) {
+                      nomeCondominio = String(dDet.imovel.nomecondominio).trim();
+                    }
+                  }
+                } catch {
+                  // Tolera indisponibilidade de detalhes adicionais
+                }
+              }
+
+              return {
+                client: clientItem,
+                imovel: imovelItem,
+                valorIptu,
+                nomeCondominio,
+              };
+            })
+          );
+
+          for (const { client: item, imovel, valorIptu, nomeCondominio } of clientProperties) {
             const dateStr = item.dataultimaalteracao || item.datainclusao;
             const updateDate = parseBrDate(dateStr);
             const diffDays = updateDate
@@ -483,8 +573,12 @@ export async function fetchImoviewProperties(options: {
               continue;
             }
 
+            // Resolução inteligente do Bairro e Cidade do imóvel
+            const addr = parseAddressInfo(imovel?.endereco || item.enderecos?.[0]?.endereco);
+            const itemBairro = addr.bairro || item.enderecos?.[0]?.bairro || "Santos";
+            const itemCidade = addr.cidade || item.enderecos?.[0]?.cidade || "Santos";
+
             // Filtro por bairro se informado
-            const itemBairro = item.enderecos?.[0]?.bairro || "";
             if (options.bairro && itemBairro && !itemBairro.toLowerCase().includes(options.bairro.toLowerCase())) {
               continue;
             }
@@ -493,6 +587,7 @@ export async function fetchImoviewProperties(options: {
               const q = options.termo.toLowerCase();
               const match =
                 String(item.codigo).includes(q) ||
+                (imovel?.codigo && String(imovel.codigo).includes(q)) ||
                 propNome.toLowerCase().includes(q) ||
                 rawPhone.includes(q) ||
                 itemBairro.toLowerCase().includes(q);
@@ -504,21 +599,32 @@ export async function fetchImoviewProperties(options: {
             const qtdImoveis = propRel || locRel || 1;
             const finalidadeNome = tipoRel === 6 ? "Venda" : "Locação";
 
+            const valorImovel = imovel?.valor ? formatarMoeda(imovel.valor) : `${qtdImoveis} imóvel(is)`;
+            const valorCond = imovel?.valorcondominio ? formatarMoeda(imovel.valorcondominio) : undefined;
+            const tipoDesc = imovel?.tipoimovel || finalidadeNome;
+            const codigoFinal = imovel?.codigo ? String(imovel.codigo) : String(item.codigo);
+            const tituloFinal = imovel?.tipoimovel
+              ? `${imovel.tipoimovel} em ${itemBairro}`
+              : `Proprietário (${qtdImoveis} imóvel${qtdImoveis > 1 ? "is" : ""})`;
+
             allProperties.push({
-              codigo: String(item.codigo),
-              titulo: `Proprietário (${qtdImoveis} imóvel${qtdImoveis > 1 ? "is" : ""})`,
-              tipo: finalidadeNome,
+              codigo: codigoFinal,
+              titulo: tituloFinal,
+              tipo: tipoDesc,
               finalidade: finalidadeNome,
-              valor: `${qtdImoveis} imóvel(is)`,
-              bairro: itemBairro || "Santos",
-              cidade: item.enderecos?.[0]?.cidade || "SP",
+              valor: valorImovel || "Sob Consulta",
+              valorCondominio: valorCond,
+              valorIptu,
+              nomeCondominio,
+              bairro: itemBairro,
+              cidade: itemCidade,
               dataUltimaAlteracao: dateStr || undefined,
               diasSemAtualizacao: diffDays,
               proprietarioNome: propNome,
               proprietarioTelefone: rawPhone,
+              situacao: imovel?.situacao || undefined,
             });
 
-            if (allProperties.length >= maxLimit) break;
           }
         } catch (e: any) {
           logger.error("Imoview", `Error fetching owners page ${page}:`, e);
@@ -656,15 +762,6 @@ export async function fetchImoviewProperties(options: {
             const formattedValor = item.valor
               ? (typeof item.valor === "number" ? `R$ ${item.valor.toLocaleString("pt-BR")}` : String(item.valor))
               : "Sob Consulta";
-
-            // Formatação de Condomínio e IPTU
-            const formatarMoeda = (val: any) => {
-              if (!val) return undefined;
-              if (typeof val === "number") return `R$ ${val.toLocaleString("pt-BR")}`;
-              const s = String(val).trim();
-              if (s === "0" || s === "R$ 0,00" || s === "R$ 0" || s === "") return undefined;
-              return s;
-            };
 
             const formattedCondominio = formatarMoeda(item.valorcondominio);
             const formattedIptu = formatarMoeda(item.valoriptu);

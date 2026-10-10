@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       orderBy: { updatedAt: "desc" },
     });
 
-    // Auto-seed default real estate templates on first access
+    // Auto-seed or synchronize default real estate templates
     if (templates.length === 0) {
       for (const tpl of REAL_ESTATE_DEFAULT_TEMPLATES) {
         await prisma.messageTemplate.create({
@@ -43,6 +43,35 @@ export async function GET(request: NextRequest) {
         where: { userId: user.id },
         orderBy: { updatedAt: "desc" },
       });
+    } else {
+      let needsRefresh = false;
+      for (const tpl of REAL_ESTATE_DEFAULT_TEMPLATES) {
+        const existing = templates.find((t) => t.name === tpl.name);
+        if (!existing) {
+          await prisma.messageTemplate.create({
+            data: {
+              userId: user.id,
+              name: tpl.name,
+              category: tpl.category,
+              content: tpl.content,
+            },
+          });
+          needsRefresh = true;
+        } else if (tpl.category === "Proprietários" && !existing.content.includes("{{condominio}}")) {
+          await prisma.messageTemplate.update({
+            where: { id: existing.id },
+            data: { content: tpl.content },
+          });
+          needsRefresh = true;
+        }
+      }
+
+      if (needsRefresh) {
+        templates = await prisma.messageTemplate.findMany({
+          where: { userId: user.id },
+          orderBy: { updatedAt: "desc" },
+        });
+      }
     }
 
     return NextResponse.json({

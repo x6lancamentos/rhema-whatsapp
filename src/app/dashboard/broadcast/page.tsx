@@ -499,7 +499,7 @@ export default function BroadcastPage() {
               duplicates: 0,
             });
 
-            const ownerSuggestedMsg = "{Olá|Oi} {{primeiro_nome}}, tudo bem? Sou da Rhema Imóveis.\n\nEstamos atualizando a nossa carteira de imóveis para clientes compradores e investidores ativos.\n\nGostaria de confirmar se o seu imóvel (Cód. {{codigo_imovel}} - {{tipo_imovel}} no {{bairro}}) ainda está disponível para {{finalidade}} e se o valor continua {{valor}}?\n\nPodemos confirmar os detalhes?";
+            const ownerSuggestedMsg = "{Olá|Oi} {{primeiro_nome}}, tudo bem? Sou da Rhema Imóveis.\n\nEstamos atualizando a nossa carteira de imóveis para clientes compradores e investidores ativos.\n\nGostaria de confirmar se o seu imóvel (Cód. {{codigo_imovel}} - {{tipo_imovel}} em {{bairro}}) ainda está disponível para {{finalidade}}?\n\nPoderia confirmar também se os valores continuam:\n💰 *Valor:* {{valor}}\n🏢 *Condomínio:* {{condominio}}\n📄 *IPTU:* {{iptu}}\n\nPodemos confirmar estes dados?";
             setMessage(ownerSuggestedMsg);
             updatePreview(ownerSuggestedMsg, parsed);
 
