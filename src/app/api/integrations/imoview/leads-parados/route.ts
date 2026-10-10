@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const dias = parseInt(searchParams.get("dias") || "7", 10);
+    const dias = parseInt(searchParams.get("dias") || "0", 10);
+    const diasMaximos = parseInt(searchParams.get("diasMaximos") || "0", 10);
+    const dataInicio = searchParams.get("dataInicio") || undefined;
+    const dataFim = searchParams.get("dataFim") || undefined;
     const requestedCorretorId = searchParams.get("corretorId") || undefined;
     const statusId = searchParams.get("statusId") || undefined;
     const limite = parseInt(searchParams.get("limite") || "100", 10);
@@ -68,6 +71,9 @@ export async function GET(request: NextRequest) {
 
     const leads = await fetchImoviewStalledLeads({
       diasSemContato: dias,
+      diasMaximos,
+      dataInicio,
+      dataFim,
       corretorId: activeCorretorId,
       statusId,
       limite,

@@ -26,12 +26,13 @@ O **Rhema WhatsApp Auto** é uma plataforma de automação, mensageria e atendim
 
 ## 1. 🏢 Integração CRM Imoview & Gestão de Imóveis
 
-- [x] **Resgate de Leads Parados**: Filtro por dias sem interação, corretor e situação; puxa atendimentos ativos diretamente da API do Imoview.
+- [x] **Resgate de Leads Parados**: Filtro avançado por período sem interação (predefinições > 7d, 15d, 30d, 60d, 90d, 180d, dias personalizados mínimo/máximo e intervalo de datas por calendário), corretor responsável e situação; puxa atendimentos ativos diretamente da API do Imoview.
 - [x] **Variáveis do Imóvel no Lead**: Extração inteligente de dados do imóvel associado (`{{codigo_imovel}}`, `{{tipo_imovel}}`, `{{bairro}}`, `{{cidade}}`, `{{valor}}`, `{{quartos}}`, `{{vagas}}`).
 - [x] **Módulo de Contato com Proprietários (Captação & Atualização)**:
-  - Puxar via Imoview a lista de proprietários de imóveis ativos (`/dashboard/imoview`).
-  - Filtro para imóveis sem atualização há mais de 30, 60 ou 90 dias, além de intervalos customizados e datas específicas.
-  - **Suporte a Imóveis Próprios da Rhema (Patrimônio da Casa)**: Seleção dedicada de imóveis próprios da Rhema atualizados pela Camila (Pré-Vendas / Recepção), com isolamento de contatos e atribuição automática.
+  - Puxar via Imoview a base real de proprietários de imóveis ativos (`/dashboard/imoview`) com nomes e WhatsApps reais dos donos.
+  - Filtro por finalidade fiel (Venda e Locação com tags coloridas distintas).
+  - Filtro para imóveis/proprietários sem atualização há mais de 30, 60 ou 90 dias, além de intervalos customizados e datas específicas.
+  - **Suporte a Imóveis Próprios da Rhema (Patrimônio da Casa)**: Seleção dedicada de imóveis próprios da Rhema sem sobrescrever indevidamente os donos reais dos imóveis regulares.
   - **Variáveis de Condomínio e IPTU**: Extração de valores e nomes (`{{condominio}}`, `{{valor_condominio}}`, `{{iptu}}`, `{{valor_iptu}}`, `{{nome_condominio}}`) disponíveis como variáveis dinâmicas e chips de inserção rápida no disparador em massa.
   - Disparo em massa para confirmação de disponibilidade, preço e dados do imóvel.
   - Template de "Imóvel Vendido" para proprietários (notificação de fechamento e solicitação de novas captações).

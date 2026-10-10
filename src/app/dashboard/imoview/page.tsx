@@ -126,7 +126,13 @@ export default function ImoviewIntegrationPage() {
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [brokers, setBrokers] = useState<ImoviewBroker[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(false);
+  const [periodoModoLeads, setPeriodoModoLeads] = useState<"presets" | "custom_days" | "custom_range">("presets");
   const [diasFiltroLeads, setDiasFiltroLeads] = useState(15);
+  const [diasMinimosCustomLeads, setDiasMinimosCustomLeads] = useState("");
+  const [diasMaximosCustomLeads, setDiasMaximosCustomLeads] = useState("");
+  const [dataInicioCustomLeads, setDataInicioCustomLeads] = useState("");
+  const [dataFimCustomLeads, setDataFimCustomLeads] = useState("");
+  const [limiteFiltroLeads, setLimiteFiltroLeads] = useState(100);
   const [corretorFiltro, setCorretorFiltro] = useState("");
   const [searchLeadTerm, setSearchLeadTerm] = useState("");
   const [restrictedToBroker, setRestrictedToBroker] = useState<string | null>(null);
@@ -246,7 +252,16 @@ export default function ImoviewIntegrationPage() {
     setLeadsLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set("dias", String(diasFiltroLeads));
+      if (periodoModoLeads === "presets") {
+        if (diasFiltroLeads > 0) params.set("dias", String(diasFiltroLeads));
+      } else if (periodoModoLeads === "custom_days") {
+        if (diasMinimosCustomLeads) params.set("dias", diasMinimosCustomLeads);
+        if (diasMaximosCustomLeads) params.set("diasMaximos", diasMaximosCustomLeads);
+      } else if (periodoModoLeads === "custom_range") {
+        if (dataInicioCustomLeads) params.set("dataInicio", dataInicioCustomLeads);
+        if (dataFimCustomLeads) params.set("dataFim", dataFimCustomLeads);
+      }
+      if (limiteFiltroLeads) params.set("limite", String(limiteFiltroLeads));
       if (corretorFiltro) params.set("corretorId", corretorFiltro);
 
       const res = await fetch(`/api/integrations/imoview/leads-parados?${params.toString()}`);
@@ -262,6 +277,12 @@ export default function ImoviewIntegrationPage() {
             data,
             filters: {
               diasFiltroLeads,
+              periodoModoLeads,
+              diasMinimosCustomLeads,
+              diasMaximosCustomLeads,
+              dataInicioCustomLeads,
+              dataFimCustomLeads,
+              limiteFiltroLeads,
               corretorFiltro,
             }
           }));
@@ -282,7 +303,28 @@ export default function ImoviewIntegrationPage() {
     } finally {
       setLeadsLoading(false);
     }
-  }, [diasFiltroLeads, corretorFiltro]);
+  }, [
+    diasFiltroLeads,
+    periodoModoLeads,
+    diasMinimosCustomLeads,
+    diasMaximosCustomLeads,
+    dataInicioCustomLeads,
+    dataFimCustomLeads,
+    limiteFiltroLeads,
+    corretorFiltro
+  ]);
+
+  const handleResetLeadFilters = () => {
+    setDiasFiltroLeads(15);
+    setPeriodoModoLeads("presets");
+    setDiasMinimosCustomLeads("");
+    setDiasMaximosCustomLeads("");
+    setDataInicioCustomLeads("");
+    setDataFimCustomLeads("");
+    setLimiteFiltroLeads(100);
+    setCorretorFiltro("");
+    setSearchLeadTerm("");
+  };
 
   // Fetch Properties & Owners (Triggered ONLY on user action)
   const fetchProperties = useCallback(async () => {
@@ -813,6 +855,11 @@ export default function ImoviewIntegrationPage() {
     (p) => p.proprietarioTelefone && p.proprietarioTelefone.replace(/\D/g, "").length >= 8
   ).length;
 
+  // Metrics for Leads
+  const leadsWith15Days = leads.filter((l) => l.diasSemContato >= 15).length;
+  const leadsWith30Days = leads.filter((l) => l.diasSemContato >= 30).length;
+  const leadsWith60Days = leads.filter((l) => l.diasSemContato >= 60).length;
+
   return (
     <SessionGuard>
       <div className="space-y-6 max-w-7xl mx-auto pb-16">
@@ -890,30 +937,53 @@ export default function ImoviewIntegrationPage() {
         {/* ========================================================================= */}
         {activeTab === "resgate" && (
           <div className="space-y-4">
-            {/* Painel de Filtros */}
+            {/* Cards de Métricas de Leads */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Card className="p-3.5 border-border/60 shadow-xs bg-card">
+                <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
+                  <span>Total de Leads no CRM</span>
+                  <Users className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <div className="text-xl font-bold mt-1 text-foreground">{leads.length}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5 font-medium">
+                  Atendimentos em andamento
+                </div>
+              </Card>
+
+              <Card className="p-3.5 border-border/60 shadow-xs bg-card">
+                <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
+                  <span>Parados &gt; 15d</span>
+                  <Clock className="h-3.5 w-3.5 text-amber-500" />
+                </div>
+                <div className="text-xl font-bold mt-1 text-amber-600 dark:text-amber-400">{leadsWith15Days}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">Necessitam reativação</div>
+              </Card>
+
+              <Card className="p-3.5 border-border/60 shadow-xs bg-card">
+                <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
+                  <span>Parados &gt; 30d (Esfriando)</span>
+                  <Clock className="h-3.5 w-3.5 text-orange-500" />
+                </div>
+                <div className="text-xl font-bold mt-1 text-orange-600 dark:text-orange-400">{leadsWith30Days}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">Risco iminente de perda</div>
+              </Card>
+
+              <Card className="p-3.5 border-border/60 shadow-xs bg-card">
+                <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
+                  <span>Parados &gt; 60d (Zumbis)</span>
+                  <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
+                </div>
+                <div className="text-xl font-bold mt-1 text-rose-600 dark:text-rose-400">{leadsWith60Days}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">Prioridade para resgate</div>
+              </Card>
+            </div>
+
+            {/* Painel de Filtros de Leads */}
             <Card className="border-border/60 shadow-xs">
               <CardContent className="p-4 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                  {/* Tempo sem Contato */}
-                  <div className="sm:col-span-4 space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                      <Clock className="h-3.5 w-3.5 text-primary" /> Parados sem Interação há:
-                    </Label>
-                    <select
-                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={diasFiltroLeads}
-                      onChange={(e) => setDiasFiltroLeads(Number(e.target.value))}
-                    >
-                      <option value={7}>Mais de 7 dias sem contato</option>
-                      <option value={15}>Mais de 15 dias sem contato</option>
-                      <option value={30}>Mais de 30 dias (Esfriados)</option>
-                      <option value={60}>Mais de 60 dias (Leads Zumbis)</option>
-                      <option value={90}>Mais de 90 dias (Base Antiga)</option>
-                    </select>
-                  </div>
-
-                  {/* Corretor */}
-                  <div className="sm:col-span-4 space-y-1">
+                  {/* Corretor Responsável */}
+                  <div className="sm:col-span-5 space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
                       <UserCheck className="h-3.5 w-3.5 text-primary" /> Corretor Responsável:
                       {restrictedToBroker && (
@@ -945,13 +1015,167 @@ export default function ImoviewIntegrationPage() {
                     </select>
                   </div>
 
-                  {/* Botão de Busca */}
-                  <div className="sm:col-span-4 flex gap-2">
-                    <Button className="flex-1 h-9 text-xs font-bold" onClick={fetchLeads} disabled={leadsLoading}>
+                  {/* Limite de Registros */}
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                      <SlidersHorizontal className="h-3.5 w-3.5 text-primary" /> Quantidade Máx.:
+                    </Label>
+                    <select
+                      className="w-full text-xs h-9 rounded-md border border-input bg-background px-3 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={limiteFiltroLeads}
+                      onChange={(e) => setLimiteFiltroLeads(Number(e.target.value))}
+                    >
+                      <option value={50}>50 leads (Rápido)</option>
+                      <option value={100}>100 leads (Padrão)</option>
+                      <option value={200}>200 leads</option>
+                      <option value={500}>500 leads</option>
+                    </select>
+                  </div>
+
+                  {/* Botões de Ação da Busca */}
+                  <div className="sm:col-span-4 flex items-center gap-2">
+                    <Button 
+                      className="flex-1 h-9 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs" 
+                      onClick={fetchLeads} 
+                      disabled={leadsLoading}
+                    >
                       <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${leadsLoading ? "animate-spin" : ""}`} />
                       {leadsLoading ? "Buscando no Imoview..." : "Filtrar Leads"}
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                      title="Redefinir filtros de leads"
+                      onClick={handleResetLeadFilters}
+                      disabled={leadsLoading}
+                    >
+                      <FilterX className="h-4 w-4" />
+                    </Button>
                   </div>
+                </div>
+
+                {/* Linha Inferior: Personalização de Período dos Leads */}
+                <div className="p-3 rounded-lg bg-muted/40 border border-border/40 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-primary" /> Período sem Contato:
+                      </span>
+                      <div className="flex items-center gap-1 bg-background p-0.5 rounded-md border border-input text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setPeriodoModoLeads("presets")}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                            periodoModoLeads === "presets"
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Predefinições
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPeriodoModoLeads("custom_days")}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                            periodoModoLeads === "custom_days"
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Dias Personalizados
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPeriodoModoLeads("custom_range")}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                            periodoModoLeads === "custom_range"
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Intervalo de Datas
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {periodoModoLeads === "presets" && (
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      {[
+                        { label: "Todos os leads ativos", val: 0 },
+                        { label: "> 7 dias", val: 7 },
+                        { label: "> 15 dias (Recomendado)", val: 15 },
+                        { label: "> 30 dias (Esfriados)", val: 30 },
+                        { label: "> 60 dias (Zumbis)", val: 60 },
+                        { label: "> 90 dias (Base Antiga)", val: 90 },
+                        { label: "> 180 dias (+6 meses)", val: 180 },
+                      ].map((item) => (
+                        <button
+                          key={item.val}
+                          type="button"
+                          onClick={() => setDiasFiltroLeads(item.val)}
+                          className={`px-3 py-1 rounded-full text-xs transition-all cursor-pointer border ${
+                            diasFiltroLeads === item.val
+                              ? "bg-primary/15 border-primary text-primary font-bold"
+                              : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {periodoModoLeads === "custom_days" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 max-w-md">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Mínimo de dias sem interação:</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="Ex: 20 dias"
+                          value={diasMinimosCustomLeads}
+                          onChange={(e) => setDiasMinimosCustomLeads(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Máximo de dias sem interação:</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="Ex: 45 dias"
+                          value={diasMaximosCustomLeads}
+                          onChange={(e) => setDiasMaximosCustomLeads(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {periodoModoLeads === "custom_range" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 max-w-md">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Data Início (Último Contato):</Label>
+                        <Input
+                          type="date"
+                          value={dataInicioCustomLeads}
+                          onChange={(e) => setDataInicioCustomLeads(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Data Fim (Último Contato):</Label>
+                        <Input
+                          type="date"
+                          value={dataFimCustomLeads}
+                          onChange={(e) => setDataFimCustomLeads(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Barra de Busca de Texto e Seleção */}
@@ -1179,9 +1403,9 @@ export default function ImoviewIntegrationPage() {
                       value={origemFiltro}
                       onChange={(e) => setOrigemFiltro(e.target.value as "proprietarios" | "imoveis" | "rhema")}
                     >
-                      <option value="proprietarios">Proprietários (Base CRM - WhatsApp)</option>
+                      <option value="proprietarios">Base de Proprietários (CRM / WhatsApp)</option>
                       <option value="imoveis">Catálogo de Imóveis (Portfólio & Captações)</option>
-                      <option value="rhema">🏢 Imóveis da Rhema (Patrimônio / Próprios)</option>
+                      <option value="rhema">🏢 Imóveis Próprios da Rhema (Patrimônio)</option>
                     </select>
                   </div>
 
@@ -1209,7 +1433,6 @@ export default function ImoviewIntegrationPage() {
                         <>
                           <option value="">Todos os Corretores / Captadores</option>
                           <option value="RHEMA">🏢 Imóveis Próprios (Rhema)</option>
-                          <option value="CAMILA">🎧 Camila (Pré-Vendas / Rhema)</option>
                           {brokers.map((b) => (
                             <option key={b.id} value={b.id}>
                               {b.nome}
@@ -1735,12 +1958,19 @@ export default function ImoviewIntegrationPage() {
                                 {prop.valor}
                               </div>
                               <div className="flex items-center gap-1 mt-0.5">
-                                <Badge variant="outline" className="text-[9px]">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] font-bold ${
+                                    prop.finalidade === "Venda"
+                                      ? "border-emerald-500/40 text-emerald-600 bg-emerald-500/10"
+                                      : "border-blue-500/40 text-blue-600 bg-blue-500/10"
+                                  }`}
+                                >
                                   {prop.finalidade}
                                 </Badge>
                                 {prop.isRhemaProprio && (
-                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-emerald-500/40 text-emerald-600 bg-emerald-500/10 font-bold">
-                                    Próprio
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/40 text-amber-600 bg-amber-500/10 font-bold">
+                                    🏢 Próprio
                                   </Badge>
                                 )}
                               </div>
@@ -1786,7 +2016,7 @@ export default function ImoviewIntegrationPage() {
                             </td>
                             <td className="p-3">
                               <div className="font-semibold text-foreground text-xs">
-                                {prop.proprietarioNome || "Não informado"}
+                                {prop.proprietarioNome || "Proprietário a Vincular"}
                               </div>
                               <div className="text-[11px] font-mono flex items-center gap-1">
                                 {hasPhone ? (
