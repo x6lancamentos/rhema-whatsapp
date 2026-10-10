@@ -37,9 +37,15 @@ export const bindSessionStore = (sock: WASocket, sessionId: string, io: Server |
             logger.debug("Store", `Received ${messages.length} messages of type: ${type}`);
         }
 
+        // Filter out status@broadcast stories & broadcast messages
+        const validMessages = messages.filter(m => {
+            const jid = m.key?.remoteJid;
+            return jid && jid !== 'status@broadcast' && !jid.endsWith('@broadcast') && !jid.includes('@broadcast');
+        });
+
         // Emit to socket room for real-time frontend updates
-        if (type === 'notify' || type === 'append') {
-            io?.to(sessionId).emit('message.upsert', { messages, type });
+        if ((type === 'notify' || type === 'append') && validMessages.length > 0) {
+            io?.to(sessionId).emit('message.upsert', { messages: validMessages, type });
         }
 
         // Ensure we have the database session ID
@@ -56,7 +62,7 @@ export const bindSessionStore = (sock: WASocket, sessionId: string, io: Server |
             where: { sessionId: dbSessionId }
         });
 
-        for (const msg of messages) {
+        for (const msg of validMessages) {
             try {
                 // Auto Read Logic
                 if (type === 'notify' && (config as any)?.autoRead && !msg.key.fromMe) {
@@ -298,6 +304,11 @@ async function processAndSaveMessage(
     // Filter out Protocol & Empty Messages
     if (!msg.message) return false;
     if (!keyId || !remoteJid) return false;
+
+    // Filter out WhatsApp status stories and any broadcast channel messages
+    if (remoteJid === 'status@broadcast' || remoteJid.endsWith('@broadcast') || remoteJid.includes('@broadcast')) {
+        return false;
+    }
 
     // Ignore specific technical message types
     const messageKeys = Object.keys(msg.message);

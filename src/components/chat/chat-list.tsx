@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquarePlus, Search, MessageCircle, X, Tag, MoreHorizontal, CornerUpLeft, Trash2, Info, Check, Shield, Users } from "lucide-react";
+import { MessageSquarePlus, Search, MessageCircle, X, Tag, MoreHorizontal, CornerUpLeft, CornerDownLeft, Trash2, Info, Check, Shield, Users, User, Bookmark, ListFilter } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ interface ChatContact {
         content: string | null;
         timestamp: string;
         type: string;
+        fromMe?: boolean;
     };
 }
 
@@ -58,24 +59,26 @@ function getMessagePreview(chat: ChatContact): string {
     if (!chat.lastMessage?.content && !chat.lastMessage?.type) return "Nenhuma mensagem";
     const type = (chat.lastMessage?.type || "TEXT").toUpperCase();
     const content = chat.lastMessage?.content || "";
+    const prefix = chat.lastMessage?.fromMe ? "Você: " : "";
 
     switch (type) {
         case "AUDIO":
-            return "🎤 Mensagem de voz";
+            return `${prefix}🎤 Mensagem de voz`;
         case "IMAGE":
-            return content ? `📷 ${content}` : "📷 Foto";
+            return `${prefix}📷 ${content || "Foto"}`;
         case "VIDEO":
-            return content ? `🎥 ${content}` : "🎥 Vídeo";
+            return `${prefix}🎥 ${content || "Vídeo"}`;
         case "STICKER":
-            return "💟 Figurinha";
+            return `${prefix}💟 Figurinha`;
         case "LOCATION":
-            return "📍 Localização";
+            return `${prefix}📍 Localização`;
         case "CONTACT":
-            return `👤 Contato: ${content || "Compartilhado"}`;
+            return `${prefix}👤 Contato: ${content || "Compartilhado"}`;
         case "DOCUMENT":
-            return `📄 ${content || "Documento"}`;
+            return `${prefix}📄 ${content || "Documento"}`;
         default:
-            return content.length > 40 ? content.slice(0, 40) + "…" : content;
+            const short = content.length > 40 ? content.slice(0, 40) + "…" : content;
+            return `${prefix}${short}`;
     }
 }
 
@@ -209,9 +212,11 @@ function ChatRow({
     chat, isSelected, onSelect, sessionId, labelDots
 }: {
     chat: ChatContact; isSelected: boolean; onSelect: (jid: string, name?: string) => void; sessionId: string;
-    labelDots: { colorHex: string }[];
+    labelDots: { colorHex: string; labelId?: string; labelName?: string }[];
 }) {
     const displayName = getDisplayName(chat);
+    const isGroup = chat.jid.endsWith('@g.us');
+    const isUnanswered = Boolean(chat.lastMessage && chat.lastMessage.fromMe === false);
     const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null);
 
     return (
@@ -229,31 +234,51 @@ function ChatRow({
                 onClick={() => onSelect(chat.jid, displayName)}
                 onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, jid: chat.jid, name: displayName }); }}
             >
-                <Avatar className="h-10 w-10 flex-shrink-0">
-                    <AvatarImage src={chat.profilePic || ""} />
-                    <AvatarFallback className="text-xs font-medium bg-gradient-to-br from-primary/20 to-blue-500/20 text-primary">
-                        {displayName.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                </Avatar>
+                <div className="relative shrink-0">
+                    <Avatar className="h-10 w-10">
+                        <AvatarImage src={chat.profilePic || ""} />
+                        <AvatarFallback className={cn(
+                            "text-xs font-medium",
+                            isGroup 
+                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                : "bg-gradient-to-br from-primary/20 to-blue-500/20 text-primary"
+                        )}>
+                            {isGroup ? <Users className="h-4 w-4" /> : displayName.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                    </Avatar>
+                    {isGroup && (
+                        <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-600 border-2 border-background flex items-center justify-center text-[8px] text-white">
+                            <Users className="h-2 w-2" />
+                        </span>
+                    )}
+                </div>
 
                 <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex justify-between items-baseline gap-2 overflow-hidden">
                         <h4 className={cn("text-sm truncate flex items-center gap-1.5", isSelected ? "font-semibold text-primary" : "font-medium text-foreground")}>
-                            {displayName}
+                            <span className="truncate">{displayName}</span>
                             {/* Label dots — always visible */}
                             {labelDots.length > 0 && (
                                 <span className="flex items-center gap-[2px] shrink-0">
                                     {labelDots.map((d, i) => (
-                                        <span key={i} className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: d.colorHex }} title={d.colorHex} />
+                                        <span key={i} className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: d.colorHex }} title={d.labelName || d.colorHex} />
                                     ))}
                                 </span>
+                            )}
+                            {isUnanswered && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" title="Mensagem recebida aguardando resposta" />
                             )}
                         </h4>
                         {chat.lastMessage && (
                             <span className="text-[10px] text-muted-foreground flex-shrink-0">{getTimeLabel(chat.lastMessage.timestamp)}</span>
                         )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{getMessagePreview(chat)}</p>
+                    <p className={cn(
+                        "text-xs truncate mt-0.5",
+                        isUnanswered ? "text-foreground font-medium" : "text-muted-foreground"
+                    )}>
+                        {getMessagePreview(chat)}
+                    </p>
                 </div>
 
                 {/* Label button on hover */}
@@ -290,8 +315,19 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
     const [isNewChatOpen, setIsNewChatOpen] = useState(false);
     const [newChatNumber, setNewChatNumber] = useState("");
     const [hasMore, setHasMore] = useState(true);
-    // Label dots per JID — {colorHex}[]
-    const [chatLabelMap, setChatLabelMap] = useState<Map<string, {colorHex: string}[]>>(new Map());
+    // Label dots per JID — {colorHex, labelId, labelName}[]
+    const [chatLabelMap, setChatLabelMap] = useState<Map<string, {colorHex: string; labelId: string; labelName: string}[]>>(new Map());
+    const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
+    const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
+
+    // Saved contact lists for filtering
+    const [availableLists, setAvailableLists] = useState<{ id: string; name: string; totalCount: number }[]>([]);
+    const [selectedListId, setSelectedListId] = useState<string | null>(null);
+    const [savedListJids, setSavedListJids] = useState<Set<string>>(new Set());
+    const [loadingSavedList, setLoadingSavedList] = useState(false);
+
+    // Categories: all, private, group, unanswered
+    const [categoryFilter, setCategoryFilter] = useState<"all" | "private" | "group" | "unanswered">("all");
 
     // Superadmin Audit Mode state
     const isSuperadmin = userRole === "SUPERADMIN";
@@ -337,6 +373,8 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
             const processChats = (newChatsList: ChatContact[], existingChatsList: ChatContact[] = []) => {
                 const merged = new Map(existingChatsList.map(c => [c.jid, c]));
                 (newChatsList || []).forEach((c: any) => {
+                    // Ignore broadcast channels and status stories
+                    if (c.jid === 'status@broadcast' || c.jid.endsWith('@broadcast') || c.jid.includes('@broadcast')) return;
                     const existing = merged.get(c.jid);
                     if (!existing || (c.lastMessage?.timestamp && (!existing.lastMessage?.timestamp || new Date(c.lastMessage.timestamp) > new Date(existing.lastMessage.timestamp)))) {
                         merged.set(c.jid, c);
@@ -373,9 +411,10 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
                 const updated = [...prev];
                 newMessages.forEach(msg => {
                     const jid = msg.remoteJid;
+                    if (!jid || jid === 'status@broadcast' || jid.endsWith('@broadcast') || jid.includes('@broadcast')) return;
                     const idx = updated.findIndex(c => c.jid === jid);
                     if (idx !== -1) {
-                        updated[idx] = { ...updated[idx], lastMessage: { content: msg.content, timestamp: msg.timestamp, type: msg.type } };
+                        updated[idx] = { ...updated[idx], lastMessage: { content: msg.content, timestamp: msg.timestamp, type: msg.type, fromMe: msg.fromMe } };
                     } else { needsReload = true; }
                 });
                 updated.sort((a, b) => {
@@ -391,27 +430,84 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
         return () => { socket.off("connect", onConnect); socket.off("message.update", handler); };
     }, [sessionId, getSocket, joinSession, fetchChats]);
 
-    // Fetch label assignments for all chats
+    // Fetch label assignments and available filter options
     useEffect(() => {
         if (!sessionId) return;
         (async () => {
             try {
-                // Batch fetch all chat-label assignments in 1 call
+                // Batch fetch all chat-label assignments
                 const res = await fetch(`/api/labels/${sessionId}/chats`);
-                if (!res.ok) return;
-                const data = await res.json();
-                const map = new Map<string, { colorHex: string }[]>();
-                for (const cl of (data.data || [])) {
-                    const jid = cl.chatJid;
-                    if (!map.has(jid)) map.set(jid, []);
-                    map.get(jid)!.push({ colorHex: cl.colorHex });
+                if (res.ok) {
+                    const data = await res.json();
+                    const map = new Map<string, { colorHex: string; labelId: string; labelName: string }[]>();
+                    for (const cl of (data.data || [])) {
+                        const jid = cl.chatJid;
+                        if (!map.has(jid)) map.set(jid, []);
+                        map.get(jid)!.push({ colorHex: cl.colorHex, labelId: cl.labelId, labelName: cl.labelName });
+                    }
+                    setChatLabelMap(map);
                 }
-                setChatLabelMap(map);
             } catch (e) {
                 console.error("Failed to load label assignments", e);
             }
+
+            try {
+                // Fetch labels for session
+                const lRes = await fetch(`/api/labels/${sessionId}`);
+                if (lRes.ok) {
+                    const lData = await lRes.json();
+                    setAvailableLabels(lData.data?.labels || []);
+                }
+            } catch (e) {
+                console.error("Failed to load labels", e);
+            }
+
+            try {
+                // Fetch saved contact lists
+                const listRes = await fetch('/api/contact-lists');
+                if (listRes.ok) {
+                    const listData = await listRes.json();
+                    setAvailableLists(listData.data || []);
+                }
+            } catch (e) {
+                console.error("Failed to load saved lists", e);
+            }
         })();
     }, [sessionId]);
+
+    const handleSelectSavedList = async (listId: string) => {
+        if (selectedListId === listId) {
+            setSelectedListId(null);
+            setSavedListJids(new Set());
+            return;
+        }
+        setSelectedListId(listId);
+        setLoadingSavedList(true);
+        try {
+            const res = await fetch(`/api/contact-lists/${listId}`);
+            if (res.ok) {
+                const data = await res.json();
+                const contacts = data.data?.contacts || [];
+                const jids = new Set<string>();
+                for (const c of contacts) {
+                    const phone = (c.phone || "").replace(/\D/g, "");
+                    if (phone) {
+                        jids.add(phone);
+                        jids.add(`${phone}@s.whatsapp.net`);
+                        if (!phone.startsWith("55")) {
+                            jids.add(`55${phone}`);
+                            jids.add(`55${phone}@s.whatsapp.net`);
+                        }
+                    }
+                }
+                setSavedListJids(jids);
+            }
+        } catch (e) {
+            console.error("Failed to load contacts of list", e);
+        } finally {
+            setLoadingSavedList(false);
+        }
+    };
 
     const handleSearchChange = (val: string) => {
         setSearchInput(val);
@@ -422,14 +518,46 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
     };
 
     const filteredChats = useMemo(() => {
-        if (!searchQuery.trim()) return chats;
-        const q = searchQuery.toLowerCase();
-        return chats.filter(chat => {
-            const name = (chat.name || chat.notify || "").toLowerCase();
-            const jid = chat.jid.toLowerCase();
-            return name.includes(q) || jid.includes(q);
-        });
-    }, [chats, searchQuery]);
+        // ALWAYS exclude status@broadcast or any @broadcast
+        let list = chats.filter(c => c.jid !== 'status@broadcast' && !c.jid.endsWith('@broadcast') && !c.jid.includes('@broadcast'));
+
+        // Category filter
+        if (categoryFilter === "private") {
+            list = list.filter(c => !c.jid.endsWith('@g.us'));
+        } else if (categoryFilter === "group") {
+            list = list.filter(c => c.jid.endsWith('@g.us'));
+        } else if (categoryFilter === "unanswered") {
+            list = list.filter(c => c.lastMessage && c.lastMessage.fromMe === false);
+        }
+
+        // Label filter
+        if (selectedLabelId) {
+            list = list.filter(c => {
+                const dots = chatLabelMap.get(c.jid) || [];
+                return dots.some(d => d.labelId === selectedLabelId);
+            });
+        }
+
+        // Saved list filter
+        if (selectedListId && savedListJids.size > 0) {
+            list = list.filter(c => {
+                const cleanPhone = c.jid.split('@')[0].replace(/\D/g, '');
+                return savedListJids.has(c.jid) || savedListJids.has(cleanPhone);
+            });
+        }
+
+        // Search text filter
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            list = list.filter(chat => {
+                const name = (chat.name || chat.notify || "").toLowerCase();
+                const jid = chat.jid.toLowerCase();
+                return name.includes(q) || jid.includes(q);
+            });
+        }
+
+        return list;
+    }, [chats, categoryFilter, selectedLabelId, selectedListId, savedListJids, searchQuery, chatLabelMap]);
 
     const handleEndReached = useCallback(() => {
         if (hasMore && !loading && !searchQuery.trim()) {
@@ -466,6 +594,8 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
             </div>
         );
     }
+
+    const hasActiveFilters = categoryFilter !== "all" || Boolean(selectedLabelId) || Boolean(selectedListId);
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-background">
@@ -506,7 +636,9 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
                         {viewMode === "audit" ? (
                             auditLeads.length > 0 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">({auditLeads.length})</span>
                         ) : (
-                            chats.length > 0 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">({chats.length})</span>
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                ({filteredChats.length}{hasActiveFilters && chats.length !== filteredChats.length ? ` de ${chats.length}` : ""})
+                            </span>
                         )}
                     </h3>
                     {viewMode === "session" && (
@@ -524,6 +656,165 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
                         onChange={(e) => handleSearchChange(e.target.value)}
                         className="h-8 pl-8 text-sm bg-muted/50 border-0 rounded-lg focus-visible:ring-1" />
                 </div>
+
+                {/* Filters toolbar for WhatsApp session */}
+                {viewMode === "session" && (
+                    <div className="flex items-center gap-1 overflow-x-auto pt-0.5 pb-1 text-xs styled-scrollbar">
+                        <button
+                            onClick={() => { setCategoryFilter("all"); setSelectedLabelId(null); setSelectedListId(null); }}
+                            className={cn(
+                                "px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer",
+                                categoryFilter === "all" && !selectedLabelId && !selectedListId
+                                    ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                                    : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            )}
+                        >
+                            Todas
+                        </button>
+
+                        <button
+                            onClick={() => setCategoryFilter(categoryFilter === "private" ? "all" : "private")}
+                            className={cn(
+                                "px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1",
+                                categoryFilter === "private"
+                                    ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                                    : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            )}
+                            title="Apenas conversas privadas individuais"
+                        >
+                            <User className="h-3 w-3" />
+                            <span>Privadas</span>
+                        </button>
+
+                        <button
+                            onClick={() => setCategoryFilter(categoryFilter === "group" ? "all" : "group")}
+                            className={cn(
+                                "px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1",
+                                categoryFilter === "group"
+                                    ? "bg-emerald-600 text-white shadow-xs font-semibold"
+                                    : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            )}
+                            title="Apenas grupos"
+                        >
+                            <Users className="h-3 w-3" />
+                            <span>Grupos</span>
+                        </button>
+
+                        <button
+                            onClick={() => setCategoryFilter(categoryFilter === "unanswered" ? "all" : "unanswered")}
+                            className={cn(
+                                "px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1",
+                                categoryFilter === "unanswered"
+                                    ? "bg-amber-600 text-white shadow-xs font-semibold"
+                                    : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            )}
+                            title="Conversas com mensagens recebidas que ainda não foram respondidas"
+                        >
+                            <CornerDownLeft className="h-3 w-3" />
+                            <span>Não Respondidas</span>
+                        </button>
+
+                        {/* Labels Filter Popover */}
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button
+                                    className={cn(
+                                        "px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1",
+                                        selectedLabelId
+                                            ? "bg-purple-600 text-white shadow-xs font-semibold"
+                                            : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    )}
+                                >
+                                    <Tag className="h-3 w-3" />
+                                    <span className="max-w-[80px] truncate">
+                                        {selectedLabelId 
+                                            ? availableLabels.find(l => l.id === selectedLabelId)?.name || "Etiqueta"
+                                            : "Etiquetas"}
+                                    </span>
+                                    {selectedLabelId && (
+                                        <X
+                                            className="h-3 w-3 ml-0.5 hover:text-red-200"
+                                            onClick={(e) => { e.stopPropagation(); setSelectedLabelId(null); }}
+                                        />
+                                    )}
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-56 p-1.5" side="bottom" align="start">
+                                <div className="text-xs font-semibold text-muted-foreground px-2 py-1">Filtrar por Etiqueta</div>
+                                {availableLabels.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground px-2 py-2">Nenhuma etiqueta cadastrada.</p>
+                                ) : (
+                                    <div className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
+                                        {availableLabels.map(l => (
+                                            <button
+                                                key={l.id}
+                                                onClick={() => setSelectedLabelId(selectedLabelId === l.id ? null : l.id)}
+                                                className={cn(
+                                                    "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                                                    selectedLabelId === l.id ? "bg-muted font-bold text-foreground" : "hover:bg-muted/60 text-muted-foreground"
+                                                )}
+                                            >
+                                                <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: l.colorHex }} />
+                                                <span className="truncate flex-1">{l.name}</span>
+                                                {selectedLabelId === l.id && <Check className="h-3 w-3 text-primary shrink-0" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </PopoverContent>
+                        </Popover>
+
+                        {/* Saved List Filter Popover */}
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button
+                                    className={cn(
+                                        "px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1",
+                                        selectedListId
+                                            ? "bg-blue-600 text-white shadow-xs font-semibold"
+                                            : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    )}
+                                >
+                                    <Bookmark className="h-3 w-3" />
+                                    <span className="max-w-[80px] truncate">
+                                        {selectedListId 
+                                            ? availableLists.find(l => l.id === selectedListId)?.name || "Lista Salva"
+                                            : "Lista Salva"}
+                                    </span>
+                                    {selectedListId && (
+                                        <X
+                                            className="h-3 w-3 ml-0.5 hover:text-red-200"
+                                            onClick={(e) => { e.stopPropagation(); setSelectedListId(null); setSavedListJids(new Set()); }}
+                                        />
+                                    )}
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-60 p-1.5" side="bottom" align="start">
+                                <div className="text-xs font-semibold text-muted-foreground px-2 py-1">Filtrar por Lista Salva</div>
+                                {availableLists.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground px-2 py-2">Nenhuma lista salva encontrada.</p>
+                                ) : (
+                                    <div className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
+                                        {availableLists.map(l => (
+                                            <button
+                                                key={l.id}
+                                                onClick={() => handleSelectSavedList(l.id)}
+                                                className={cn(
+                                                    "flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                                                    selectedListId === l.id ? "bg-muted font-bold text-foreground" : "hover:bg-muted/60 text-muted-foreground"
+                                                )}
+                                            >
+                                                <span className="truncate flex-1">{l.name}</span>
+                                                <Badge variant="secondary" className="text-[10px] px-1 py-0">{l.totalCount}</Badge>
+                                                {selectedListId === l.id && <Check className="h-3 w-3 text-primary ml-1 shrink-0" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                )}
 
                 {isNewChatOpen && viewMode === "session" && (
                     <div className="p-2.5 bg-muted/30 rounded-lg space-y-2 border border-border/40">
@@ -604,7 +895,23 @@ export function ChatList({ sessionId, onSelectChat, selectedJid, userRole }: Cha
                         <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
                             <MessageCircle className="h-6 w-6 text-muted-foreground/50" />
                         </div>
-                        <p className="text-sm text-muted-foreground">{searchQuery ? "No chats match your search" : "No chats yet"}</p>
+                        <p className="text-sm text-muted-foreground">
+                            {searchQuery
+                                ? "Nenhuma conversa encontrada com esta busca"
+                                : hasActiveFilters
+                                    ? "Nenhuma conversa com os filtros selecionados"
+                                    : "Nenhuma conversa encontrada"}
+                        </p>
+                        {hasActiveFilters && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-3 text-xs font-semibold"
+                                onClick={() => { setCategoryFilter("all"); setSelectedLabelId(null); setSelectedListId(null); }}
+                            >
+                                Limpar filtros
+                            </Button>
+                        )}
                     </div>
                 ) : (
                     <Virtuoso style={{ height: "100%" }} data={filteredChats}

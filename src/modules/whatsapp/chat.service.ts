@@ -28,16 +28,21 @@ export class ChatService {
             content: string | null;
             timestamp: Date;
             type: string;
+            fromMe: boolean;
         }>>(`
-            SELECT m1.remoteJid, m1.content, m1.timestamp, m1.type
+            SELECT m1.remoteJid, m1.content, m1.timestamp, m1.type, m1.fromMe
             FROM \`Message\` m1
             INNER JOIN (
                 SELECT remoteJid, MAX(timestamp) as max_ts
                 FROM \`Message\`
-                WHERE sessionId = ?
+                WHERE sessionId = ? 
+                  AND remoteJid NOT LIKE '%@broadcast'
+                  AND remoteJid != 'status@broadcast'
                 GROUP BY remoteJid
             ) m2 ON m1.remoteJid = m2.remoteJid AND m1.timestamp = m2.max_ts
             WHERE m1.sessionId = ?
+              AND m1.remoteJid NOT LIKE '%@broadcast'
+              AND m1.remoteJid != 'status@broadcast'
             ${before ? 'AND m1.timestamp < ?' : ''}
             ORDER BY m1.timestamp DESC
             LIMIT ?
@@ -69,6 +74,7 @@ export class ChatService {
         const seenJids = new Set<string>();
         for (const msg of rawLastMessages) {
             if (seenJids.has(msg.remoteJid)) continue;
+            if (msg.remoteJid === 'status@broadcast' || msg.remoteJid.endsWith('@broadcast') || msg.remoteJid.includes('@broadcast')) continue;
             seenJids.add(msg.remoteJid);
 
             const info = infoMap.get(msg.remoteJid);
@@ -82,7 +88,8 @@ export class ChatService {
                     timestamp: msg.timestamp instanceof Date
                         ? msg.timestamp.toISOString()
                         : String(msg.timestamp),
-                    type: msg.type
+                    type: msg.type,
+                    fromMe: Boolean(msg.fromMe)
                 }
             });
         }

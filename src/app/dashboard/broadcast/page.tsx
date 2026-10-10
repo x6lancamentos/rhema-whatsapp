@@ -65,8 +65,13 @@ import {
   MessageSquare,
   Timer,
   Zap,
+  FlaskConical,
+  Lock,
+  Unlock,
+  SendHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { useSession } from "@/components/dashboard/session-provider";
 import { SessionGuard } from "@/components/dashboard/session-guard";
 import { useSocket } from "@/components/chat/socket-context";
@@ -311,6 +316,85 @@ export default function BroadcastPage() {
 
   // Preview simulation
   const [previewSample, setPreviewSample] = useState<string>("");
+
+  // Test Message Sending State (Homologação pré-disparo)
+  const [testPhone, setTestPhone] = useState<string>("");
+  const [sendingTest, setSendingTest] = useState<boolean>(false);
+  const [testSentResult, setTestSentResult] = useState<{ phone: string; timestamp: string; preview: string } | null>(null);
+  const [bypassTest, setBypassTest] = useState<boolean>(false);
+  const [testModalOpen, setTestModalOpen] = useState<boolean>(false);
+
+  // Helper para obter a mensagem resolvida com as variáveis do 1º contato
+  const getResolvedFirstContactMessage = useCallback(() => {
+    if (!message.trim() && !mediaUrl && !audioUrl) return "";
+    const sampleContact = contactsList[0];
+    const vars = sampleContact
+      ? {
+          ...(sampleContact.variables || {}),
+          nome: sampleContact.name || (sampleContact.variables as any)?.nome || "Brunno",
+          telefone: sampleContact.phone || "5513981001766",
+        }
+      : { nome: "Brunno", telefone: "5513981001766" };
+    return processPersonalizedMessage(message, vars);
+  }, [message, contactsList, mediaUrl, audioUrl]);
+
+  const handleSendTestMessage = async (customPhone?: string) => {
+    if (!sessionId) {
+      toast.error("Nenhuma sessão de WhatsApp conectada");
+      return;
+    }
+    const phoneToTest = customPhone || testPhone;
+    const cleanNumber = phoneToTest.replace(/\D/g, "");
+    if (cleanNumber.length < 10) {
+      toast.error("Por favor, digite um número de WhatsApp válido com DDD (ex: 13981001766)");
+      return;
+    }
+    const fullPhone = (cleanNumber.length === 10 || cleanNumber.length === 11) && !cleanNumber.startsWith("55")
+      ? "55" + cleanNumber
+      : cleanNumber;
+    const testJid = `${fullPhone}@s.whatsapp.net`;
+
+    const resolvedText = getResolvedFirstContactMessage();
+
+    let msgPayload: any = { text: resolvedText };
+    if (attachmentType === "media" && mediaUrl) {
+      msgPayload = {
+        [mediaType]: { url: mediaUrl },
+        caption: resolvedText,
+        ...(mediaType === "document" && mediaFileName ? { fileName: mediaFileName } : {})
+      };
+    } else if (attachmentType === "audio" && audioUrl) {
+      msgPayload = {
+        audio: { url: audioUrl },
+        ptt: isPtt
+      };
+    }
+
+    setSendingTest(true);
+    try {
+      const res = await fetch(`/api/messages/${sessionId}/${encodeURIComponent(testJid)}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msgPayload })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTestSentResult({
+          phone: fullPhone,
+          timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          preview: resolvedText
+        });
+        toast.success(`Mensagem de teste enviada com sucesso para +${fullPhone}! Lista liberada para disparo em massa.`);
+        setTestModalOpen(false);
+      } else {
+        toast.error(data.message || data.error || "Erro ao enviar mensagem de teste");
+      }
+    } catch (e: any) {
+      toast.error("Erro de conexão ao enviar mensagem de teste");
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   // 1. Socket.IO connection for real-time broadcast updates
   useEffect(() => {
@@ -2273,6 +2357,19 @@ export default function BroadcastPage() {
                             {contactsList[0]?.name || "Brunno"} ({contactsList[0]?.phone || "5519998765432"})
                           </strong>
                         </div>
+
+                        <div className="pt-2 flex justify-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs font-semibold gap-1.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+                            onClick={() => setTestModalOpen(true)}
+                            disabled={!message.trim() && !mediaUrl && !audioUrl}
+                          >
+                            <FlaskConical className="h-3.5 w-3.5" />
+                            <span>Enviar Mensagem de Teste no WhatsApp</span>
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   </div>
@@ -2791,20 +2888,132 @@ export default function BroadcastPage() {
                       )}
                     </div>
 
+                    {/* Validação & Envio de Teste Prévio */}
+                    <div className="p-4 rounded-xl border border-border/60 bg-gradient-to-br from-background to-muted/20 space-y-3.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold flex items-center gap-2 text-foreground">
+                            <FlaskConical className="h-4 w-4 text-emerald-500" />
+                            Validação & Envio de Teste Prévio
+                          </h4>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Valide a mensagem, mídias e variáveis dinâmicas no seu WhatsApp antes de liberar o disparo para os {contactsList.length} contatos.
+                          </p>
+                        </div>
+
+                        {testSentResult ? (
+                          <Badge className="bg-emerald-600 text-white font-semibold text-xs px-2.5 py-1 shrink-0">
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Teste Validado
+                          </Badge>
+                        ) : bypassTest ? (
+                          <Badge variant="outline" className="border-amber-500/40 text-amber-600 font-semibold text-xs shrink-0">
+                            ⚠️ Teste Ignorado
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="font-semibold text-xs shrink-0 text-amber-600 dark:text-amber-400 bg-amber-500/10">
+                            <Lock className="h-3 w-3 mr-1" /> Disparo Bloqueado
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Campo de Telefone + Botão de Envio de Teste */}
+                      <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                        <div className="flex-1">
+                          <Input
+                            placeholder="WhatsApp de teste com DDD (ex: 13 98100-1766)"
+                            value={testPhone}
+                            onChange={(e) => setTestPhone(e.target.value)}
+                            className="h-10 text-sm font-mono bg-background"
+                            onKeyDown={(e) => e.key === "Enter" && handleSendTestMessage()}
+                          />
+                        </div>
+                        <Button
+                          className="h-10 px-4 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0 shadow-sm"
+                          onClick={() => handleSendTestMessage()}
+                          disabled={sendingTest || !testPhone.trim()}
+                        >
+                          {sendingTest ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              <span>Enviando Teste...</span>
+                            </>
+                          ) : (
+                            <>
+                              <SendHorizontal className="h-4 w-4" />
+                              <span>Enviar Teste de Validação</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {/* Feedback de Validação */}
+                      {testSentResult ? (
+                        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
+                          <div className="font-bold flex items-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            <span>Envio de teste validado com sucesso para +{testSentResult.phone} às {testSentResult.timestamp}!</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground pl-5.5">
+                            A mensagem foi enviada usando as variáveis do 1º contato (<strong>{contactsList[0]?.name || "Primeiro Contato"}</strong>). O disparo em massa para os <strong>{contactsList.length} contatos</strong> está 100% liberado!
+                          </p>
+                        </div>
+                      ) : !bypassTest ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs pt-0.5">
+                          <span className="text-muted-foreground flex items-center gap-1 text-[11px]">
+                            <Info className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                            Para garantir que todas as variáveis estejam funcionando, envie um teste para liberar a lista.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBypassTest(true);
+                              toast.info("Aviso: Teste prévio pulado manualmente. Disparo liberado.");
+                            }}
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer shrink-0 text-left"
+                          >
+                            Pular teste e liberar direto
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-xs pt-0.5">
+                          <span className="text-amber-600 dark:text-amber-400 text-[11px] flex items-center gap-1">
+                            ⚠️ Teste pulado manualmente. Disparo liberado por decisão do usuário.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setBypassTest(false)}
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                          >
+                            Reativar exigência de teste
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Botão Master de Disparo / Decolagem */}
                     <div className="pt-2">
                       <Button
                         size="lg"
-                        className="w-full h-14 text-base font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-xl shadow-emerald-600/25 transition-all text-white gap-2"
+                        className={cn(
+                          "w-full h-14 text-base font-bold shadow-xl transition-all gap-2 text-white",
+                          (testSentResult !== null || bypassTest)
+                            ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-600/25"
+                            : "bg-muted text-muted-foreground hover:bg-muted opacity-60 cursor-not-allowed"
+                        )}
                         onClick={handleStartBroadcast}
                         disabled={
+                          (!testSentResult && !bypassTest) ||
                           loading ||
                           !sessionId ||
                           contactsList.length === 0 ||
                           (!message.trim() && !mediaUrl && !audioUrl)
                         }
                       >
-                        {loading ? (
+                        {(!testSentResult && !bypassTest) ? (
+                          <>
+                            <Lock className="mr-2 h-5 w-5" /> Envie uma mensagem de teste acima para liberar o disparo em massa
+                          </>
+                        ) : loading ? (
                           <>
                             <RefreshCw className="mr-2 h-5 w-5 animate-spin" /> Disparando em Segundo Plano...
                           </>
@@ -3858,6 +4067,109 @@ export default function BroadcastPage() {
                 </div>
               </div>
             ) : null}
+          </DialogContent>
+        </Dialog>
+
+        {/* MODAL: ENVIO DE TESTE DE VALIDAÇÃO */}
+        <Dialog open={testModalOpen} onOpenChange={setTestModalOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FlaskConical className="h-5 w-5 text-emerald-500" />
+                <span>Envio de Teste de Validação</span>
+              </DialogTitle>
+              <DialogDescription>
+                Valide a entrega da mensagem, Spintax e as variáveis dinâmicas antes de liberar o disparo para toda a lista.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              {/* Amostra com Variáveis do 1º Contato */}
+              <div className="p-3 bg-muted/40 rounded-xl border border-border/50 space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                    Variáveis do 1º Contato da Lista:
+                  </span>
+                  <Badge variant="outline" className="font-mono text-[10px]">
+                    {contactsList[0]?.name || "Brunno"}
+                  </Badge>
+                </div>
+                <div className="p-2.5 bg-background rounded-lg text-xs font-mono whitespace-pre-wrap max-h-36 overflow-y-auto border border-border/40 text-foreground">
+                  {getResolvedFirstContactMessage() || (
+                    <span className="text-muted-foreground italic">Nenhuma mensagem configurada ainda...</span>
+                  )}
+                </div>
+                {(mediaUrl || audioUrl) && (
+                  <div className="text-[11px] text-muted-foreground pt-1 flex items-center gap-2">
+                    {audioUrl && <Badge variant="outline" className="text-emerald-600 border-emerald-500/30 text-[10px]"><Mic className="h-2.5 w-2.5 mr-1" /> Áudio PTT Incluso</Badge>}
+                    {mediaUrl && <Badge variant="outline" className="text-blue-600 border-blue-500/30 text-[10px]">📎 Mídia: {mediaFileName || mediaType}</Badge>}
+                  </div>
+                )}
+              </div>
+
+              {/* Input do WhatsApp de Teste */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-foreground">
+                  WhatsApp de Teste (com DDD):
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="(13) 98100-1766 ou 5513981001766"
+                    value={testPhone}
+                    onChange={(e) => setTestPhone(e.target.value)}
+                    className="text-sm font-mono h-10"
+                    onKeyDown={(e) => e.key === "Enter" && handleSendTestMessage()}
+                  />
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 font-semibold gap-1.5 h-10 px-4"
+                    onClick={() => handleSendTestMessage()}
+                    disabled={sendingTest || !testPhone.trim()}
+                  >
+                    {sendingTest ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <SendHorizontal className="h-4 w-4" />
+                    )}
+                    <span>Enviar Teste</span>
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Dica: Você pode digitar o seu próprio número de WhatsApp para conferir a notificação e a formatação no seu aparelho.
+                </p>
+              </div>
+
+              {/* Status do Teste */}
+              {testSentResult && (
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <span>Último teste enviado com sucesso para +{testSentResult.phone} às {testSentResult.timestamp}!</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground pl-5.5">
+                    A lista de envio está oficialmente liberada para disparo.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="flex items-center justify-between sm:justify-between pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setTestModalOpen(false)}>
+                Fechar
+              </Button>
+              {testSentResult && (
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                  onClick={() => {
+                    setTestModalOpen(false);
+                    setWizardStep(4);
+                  }}
+                >
+                  Ir para Revisão & Disparo (Passo 4)
+                </Button>
+              )}
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
