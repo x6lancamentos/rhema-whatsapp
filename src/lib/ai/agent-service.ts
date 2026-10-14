@@ -22,6 +22,8 @@ export interface AgentProcessOutput {
   newValue?: string | null;
   newCondo?: string | null;
   newIptu?: string | null;
+  visitingHours?: string | null;
+  referral?: string | null;
   notes?: string;
   needsReceptionAlert: boolean;
   rollingSummary: string;
@@ -95,6 +97,8 @@ export function formatReceptionNotification(params: {
   novoValor?: string | null;
   condominioAnterior?: string | null;
   novoCondominio?: string | null;
+  visitingHours?: string | null;
+  referral?: string | null;
   observacoes?: string | null;
 }): string {
   const statusLabels: Record<string, string> = {
@@ -114,6 +118,12 @@ export function formatReceptionNotification(params: {
   }
   if (params.novoCondominio) {
     valoresText += `🏢 *Condomínio:* ${params.condominioAnterior ? `De ${params.condominioAnterior} ➔ ` : ""}*${params.novoCondominio}*\n`;
+  }
+  if (params.visitingHours) {
+    valoresText += `🕒 *Preferência de Visitas:* *${params.visitingHours}*\n`;
+  }
+  if (params.referral) {
+    valoresText += `🤝 *Indicação / Oportunidade:* *${params.referral}*\n`;
   }
 
   return (
@@ -268,13 +278,25 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
   const newValue = parsed.newValue || null;
   const newCondo = parsed.newCondo || null;
   const newIptu = parsed.newIptu || null;
+  const visitingHours = parsed.visitingHours || null;
+  const referral = parsed.referral || null;
   const notes = parsed.notes || "";
+
+  let enrichedNotes = notes;
+  if (visitingHours && !enrichedNotes.toLowerCase().includes("visita")) {
+    enrichedNotes = `${enrichedNotes ? `${enrichedNotes} | ` : ""}Visitas: ${visitingHours}`;
+  }
+  if (referral && !enrichedNotes.toLowerCase().includes("indica")) {
+    enrichedNotes = `${enrichedNotes ? `${enrichedNotes} | ` : ""}Indicação: ${referral}`;
+  }
   
-  // Regra de Ouro: Qualquer alteração de dados cadastrais, valor, condomínio ou venda dispara aviso para a recepção!
+  // Regra de Ouro: Qualquer alteração de dados cadastrais, valor, condomínio, visitas ou indicação dispara aviso para a recepção!
   const hasValueOrStatusChange = Boolean(
     isPropertyUpdate ||
     newValue ||
     newCondo ||
+    visitingHours ||
+    referral ||
     propertyStatus === "DISPONIVEL" ||
     propertyStatus === "VENDIDO_OUTRA" ||
     propertyStatus === "VENDIDO_RHEMA" ||
@@ -295,7 +317,9 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
       novoValor: newValue,
       condominioAnterior: cachedContext?.valorCondominio,
       novoCondominio: newCondo,
-      observacoes: notes,
+      visitingHours,
+      referral,
+      observacoes: enrichedNotes,
     });
   }
 
@@ -357,7 +381,7 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
             condominioAnterior: cachedContext?.valorCondominio,
             novoCondominio: newCondo,
             statusImovel: propertyStatus,
-            observacoes: notes,
+            observacoes: enrichedNotes,
             statusProcessamento: "PENDENTE",
           },
         });
@@ -406,7 +430,9 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     newValue,
     newCondo,
     newIptu,
-    notes,
+    visitingHours,
+    referral,
+    notes: enrichedNotes,
     needsReceptionAlert,
     rollingSummary: updatedRollingSummary,
     receptionMessageText,

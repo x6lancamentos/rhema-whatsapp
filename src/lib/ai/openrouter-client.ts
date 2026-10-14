@@ -39,7 +39,7 @@ export async function callOpenRouter(options: OpenRouterCompletionOptions): Prom
     fallbackModel = DEFAULT_FALLBACK_MODEL,
     messages,
     temperature = 0.3,
-    maxTokens = 3500,
+    maxTokens = 6000,
     responseFormatJson = false,
   } = options;
 
@@ -65,6 +65,7 @@ export async function callOpenRouter(options: OpenRouterCompletionOptions): Prom
         messages,
         temperature,
         max_tokens: maxTokens,
+        reasoning: { max_tokens: 1000 },
       };
 
       if (responseFormatJson) {

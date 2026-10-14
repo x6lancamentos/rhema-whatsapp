@@ -231,6 +231,8 @@ export default function AiAgentPage() {
             propertyStatus: out.propertyStatus,
             newValue: out.newValue,
             newCondo: out.newCondo,
+            visitingHours: out.visitingHours,
+            referral: out.referral,
             notes: out.notes,
             needsReceptionAlert: out.needsReceptionAlert,
           },
@@ -436,7 +438,27 @@ export default function AiAgentPage() {
                 }
                 className="px-2.5 py-1 bg-white dark:bg-zinc-800 border rounded-full hover:border-indigo-500 text-xs transition"
               >
-                💰 Baixou o Preço (490k / Cond 650)
+                💰 Preço (490k / Cond 650)
+              </button>
+              <button
+                onClick={() =>
+                  handleQuickPrompt(
+                    "Sobre as visitas, fica melhor aos sábados das 10h às 15h ou dias de semana após as 18h, apenas avisando 24h antes."
+                  )
+                }
+                className="px-2.5 py-1 bg-white dark:bg-zinc-800 border rounded-full hover:border-indigo-500 text-xs transition"
+              >
+                🕒 Horários de Visitas
+              </button>
+              <button
+                onClick={() =>
+                  handleQuickPrompt(
+                    "Ah Camila, inclusive meu vizinho do apto 42 comentou que quer vender o dele de 3 dormitórios também, o nome dele é Seu Mário."
+                  )
+                }
+                className="px-2.5 py-1 bg-white dark:bg-zinc-800 border rounded-full hover:border-indigo-500 text-xs transition"
+              >
+                🤝 Indicação de Novo Imóvel
               </button>
               <button
                 onClick={() =>
@@ -595,6 +617,22 @@ export default function AiAgentPage() {
                       {latestExtracted.needsReceptionAlert ? "SIM (Necessário)" : "Não"}
                     </span>
                   </div>
+                  {latestExtracted.visitingHours && (
+                    <div className="col-span-2 p-2.5 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 rounded-lg">
+                      <span className="text-blue-600 dark:text-blue-400 block text-[10px] font-semibold">
+                        🕒 Preferência de Visitas:
+                      </span>
+                      <span className="font-medium text-foreground">{latestExtracted.visitingHours}</span>
+                    </div>
+                  )}
+                  {latestExtracted.referral && (
+                    <div className="col-span-2 p-2.5 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-lg">
+                      <span className="text-amber-600 dark:text-amber-400 block text-[10px] font-semibold">
+                        🤝 Indicação de Novo Imóvel:
+                      </span>
+                      <span className="font-medium text-foreground">{latestExtracted.referral}</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">Envie uma mensagem para ver os dados decodificados.</p>
