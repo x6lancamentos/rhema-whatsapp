@@ -445,7 +445,7 @@ export async function fetchImoviewProperties(options: {
   for (const b of brokers) {
     brokerMap.set(b.id, b.nome);
   }
-  brokerMap.set("RHEMA", "Rhema Imóveis (Imóveis Próprios)");
+  brokerMap.set("RHEMA", "Rhema (Camila)");
   brokerMap.set("CAMILA", "Camila (Pré-Vendas / Rhema)");
 
   const allProperties: ImoviewProperty[] = [];
@@ -453,13 +453,12 @@ export async function fetchImoviewProperties(options: {
 
   const isRhemaFilter = options.origem === "rhema" || options.corretorId === "RHEMA";
 
-  // Se a origem for expressamente 'imoveis' ou 'rhema', busca via catálogo de Imóveis.
-  // Caso contrário, busca na Base de Proprietários (Cliente/RetornarClientes).
-  const origem = options.origem === "rhema" 
-    ? "imoveis" 
-    : (options.origem === "imoveis" 
-        ? "imoveis" 
-        : (options.corretorId && options.corretorId !== "CAMILA" ? "imoveis" : (options.origem || "proprietarios")));
+  // Se a origem for expressamente 'imoveis' ou corretor externo numérico específico, busca via catálogo de Imóveis.
+  // Caso contrário ('proprietarios' ou 'rhema' ou corretor 'RHEMA'/'CAMILA'), busca na Base de Proprietários do CRM (Cliente/RetornarClientes)
+  // onde os proprietários cadastrados e seus telefones reais existem!
+  const origem = (options.origem === "imoveis" || (options.corretorId && !["RHEMA", "CAMILA"].includes(options.corretorId)))
+    ? "imoveis"
+    : "proprietarios";
 
   if (origem === "proprietarios") {
     // Tipos de relacionamento no Imoview:
@@ -562,10 +561,14 @@ export async function fetchImoviewProperties(options: {
             if (startDate && updateDate && updateDate < startDate) continue;
             if (endDate && updateDate && updateDate > endDate) continue;
 
-            const propNome = (item.nome || item.fantasia || "Proprietário").trim();
-            // Pega o primeiro telefone válido
-            const rawPhone = (
-              item.telefones?.find((t: any) => t.numero && t.numero.replace(/\D/g, "").length >= 8)?.numero ||
+            let propNome = (item.nome || item.fantasia || "Proprietário").trim();
+            if (propNome.toLowerCase().includes("rhema")) {
+              propNome = "Proprietário";
+            }
+
+            // Pega o primeiro telefone válido (garantindo que não seja o fixo da recepção Rhema)
+            let rawPhone = (
+              item.telefones?.find((t: any) => t.numero && t.numero.replace(/\D/g, "").length >= 8 && !t.numero.includes("32270909") && !t.numero.includes("3227-0909"))?.numero ||
               ""
             ).trim();
 
@@ -623,6 +626,8 @@ export async function fetchImoviewProperties(options: {
               proprietarioNome: propNome,
               proprietarioTelefone: rawPhone,
               situacao: imovel?.situacao || undefined,
+              corretorNome: isRhemaFilter ? "Rhema (Camila)" : undefined,
+              isRhemaProprio: false,
             });
 
           }
@@ -633,7 +638,7 @@ export async function fetchImoviewProperties(options: {
       }
     }
   } else {
-    // Origem === "imoveis" ou "rhema" (Catálogo de Imóveis & Captações)
+    // Origem === "imoveis" (Catálogo de Imóveis & Portfólio)
     const finalidades = options.finalidade && options.finalidade !== "0"
       ? [options.finalidade]
       : ["2", "1"];
@@ -700,17 +705,9 @@ export async function fetchImoviewProperties(options: {
               continue;
             }
 
-            // Identificação de imóvel pertencente exclusivamente ao patrimônio próprio da Rhema
-            const isRhemaProprio = options.origem === "rhema" || options.corretorId === "RHEMA";
-
-            // Se o usuário solicitou especificamente filtrar imóveis próprios da Rhema
-            if (isRhemaFilter && !isRhemaProprio) {
-              continue;
-            }
-
             const brokerNome = options.corretorId
               ? brokerMap.get(options.corretorId)
-              : (isRhemaProprio ? "Rhema Imóveis (Camila)" : undefined);
+              : (isRhemaFilter ? "Rhema (Camila)" : undefined);
 
             if (options.termo) {
               const q = options.termo.toLowerCase();
@@ -720,8 +717,7 @@ export async function fetchImoviewProperties(options: {
                 (item.bairro || "").toLowerCase().includes(q) ||
                 (item.cidade || "").toLowerCase().includes(q) ||
                 (item.tipo || "").toLowerCase().includes(q) ||
-                (brokerNome && brokerNome.toLowerCase().includes(q)) ||
-                (isRhemaProprio && "rhema".includes(q));
+                (brokerNome && brokerNome.toLowerCase().includes(q));
               if (!match) continue;
             }
 
@@ -744,15 +740,33 @@ export async function fetchImoviewProperties(options: {
               ""
             ).trim();
 
-            if (isRhemaProprio) {
-              if (!propNome) {
-                propNome = "Rhema Imóveis (Patrimônio / Próprio)";
-              }
-              if (!rawPhone || rawPhone.replace(/\D/g, "").length < 8) {
-                rawPhone = (item.telefoneunidade || "(13) 3227-0909").trim();
-              }
-            } else if (!propNome) {
-              propNome = "Proprietário a Vincular";
+            // Nunca atribua "Rhema" como nome de proprietário e nem o telefone da recepção da Rhema
+            if (propNome.toLowerCase().includes("rhema")) {
+              propNome = "";
+            }
+            if (rawPhone.replace(/\D/g, "").includes("32270909")) {
+              rawPhone = "";
+            }
+
+            // Tentar recuperar do cache de contexto do banco se faltar nome ou telefone
+            if (!propNome || !rawPhone) {
+              try {
+                const cachedCtx = await prisma.imoviewContactContext.findFirst({
+                  where: { codigoImovel: String(item.codigo) },
+                });
+                if (cachedCtx) {
+                  if (!propNome && cachedCtx.nome && !cachedCtx.nome.toLowerCase().includes("rhema")) {
+                    propNome = cachedCtx.nome;
+                  }
+                  if (!rawPhone && cachedCtx.phone && !cachedCtx.phone.includes("32270909")) {
+                    rawPhone = cachedCtx.phone;
+                  }
+                }
+              } catch {}
+            }
+
+            if (!propNome) {
+              propNome = "Proprietário";
             }
 
             if (options.somenteComTelefone && (!rawPhone || rawPhone.replace(/\D/g, "").length < 8)) {
@@ -801,7 +815,7 @@ export async function fetchImoviewProperties(options: {
               corretorId: options.corretorId || undefined,
               corretorNome: brokerNome || (item.captadores?.[0]?.nome || undefined),
               situacao: item.situacao || undefined,
-              isRhemaProprio,
+              isRhemaProprio: false,
             });
 
             if (allProperties.length >= maxLimit) break;

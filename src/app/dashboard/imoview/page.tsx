@@ -481,6 +481,19 @@ export default function ImoviewIntegrationPage() {
       if (cachedPropsStr) {
         const cached = JSON.parse(cachedPropsStr);
         if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
+          // Detectar e descartar cache legado onde proprietário vinha com o nome da imobiliária
+          const hasBuggyRhemaOwners = cached.data.some((p: ImoviewProperty) =>
+            p.proprietarioNome && (p.proprietarioNome.includes("Rhema Imóveis") || p.proprietarioNome.includes("Patrimônio"))
+          );
+
+          if (hasBuggyRhemaOwners) {
+            try { localStorage.removeItem("rhema_cached_imoview_properties"); } catch {}
+            setProperties([]);
+            setHasSearchedProps(false);
+            setCachePropsTimestamp(null);
+            return;
+          }
+
           setProperties(cached.data);
           setHasSearchedProps(true);
           setCachePropsTimestamp(cached.timestamp);
@@ -668,17 +681,48 @@ export default function ImoviewIntegrationPage() {
       );
       toast.success("Dados do lead atualizados!");
     } else {
-      setProperties((prev) =>
-        prev.map((item) =>
-          item.codigo === editContactModal.id
+      const updatedName = editContactModal.name.trim();
+      const updatedPhone = editContactModal.phone.trim();
+      const targetCode = editContactModal.id;
+
+      setProperties((prev) => {
+        const next = prev.map((item) =>
+          item.codigo === targetCode
             ? {
                 ...item,
-                proprietarioNome: editContactModal.name.trim(),
-                proprietarioTelefone: editContactModal.phone.trim(),
+                proprietarioNome: updatedName,
+                proprietarioTelefone: updatedPhone,
               }
             : item
-        )
-      );
+        );
+
+        // Atualiza imediatamente o cache no localStorage
+        try {
+          const cachedPropsStr = localStorage.getItem("rhema_cached_imoview_properties");
+          if (cachedPropsStr) {
+            const cached = JSON.parse(cachedPropsStr);
+            cached.data = next;
+            localStorage.setItem("rhema_cached_imoview_properties", JSON.stringify(cached));
+          }
+        } catch {}
+
+        return next;
+      });
+
+      // Salva no banco de dados para sincronia permanente e uso nos disparos
+      try {
+        fetch("/api/integrations/imoview/context", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            codigoImovel: targetCode,
+            nome: updatedName,
+            phone: updatedPhone,
+            tipoRelacionamento: "proprietario",
+          }),
+        }).catch(() => {});
+      } catch {}
+
       toast.success("Dados do proprietário atualizados!");
     }
 
@@ -1351,7 +1395,7 @@ export default function ImoviewIntegrationPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Card className="p-3.5 border-border/60 shadow-xs bg-card">
                 <div className="text-[11px] font-medium text-muted-foreground flex items-center justify-between">
-                  <span>{origemFiltro === "rhema" ? "🏢 Imóveis Próprios (Rhema)" : origemFiltro === "proprietarios" ? "Proprietários no CRM" : "Imóveis no Catálogo"}</span>
+                  <span>{origemFiltro === "rhema" ? "🏢 Captações Rhema (Camila)" : origemFiltro === "proprietarios" ? "Proprietários no CRM" : "Imóveis no Catálogo"}</span>
                   <Home className="h-3.5 w-3.5 text-primary" />
                 </div>
                 <div className="text-xl font-bold mt-1 text-foreground">{properties.length}</div>
@@ -1405,7 +1449,7 @@ export default function ImoviewIntegrationPage() {
                     >
                       <option value="proprietarios">Base de Proprietários (CRM / WhatsApp)</option>
                       <option value="imoveis">Catálogo de Imóveis (Portfólio & Captações)</option>
-                      <option value="rhema">🏢 Imóveis Próprios da Rhema (Patrimônio)</option>
+                      <option value="rhema">🏢 Captações da Rhema (Camila)</option>
                     </select>
                   </div>
 
@@ -1432,7 +1476,7 @@ export default function ImoviewIntegrationPage() {
                       ) : (
                         <>
                           <option value="">Todos os Corretores / Captadores</option>
-                          <option value="RHEMA">🏢 Imóveis Próprios (Rhema)</option>
+                          <option value="RHEMA">🏢 Captações Rhema (Camila)</option>
                           {brokers.map((b) => (
                             <option key={b.id} value={b.id}>
                               {b.nome}
@@ -1912,7 +1956,7 @@ export default function ImoviewIntegrationPage() {
                                   <div className="font-semibold text-foreground text-xs flex items-center gap-1.5">
                                     <span className="font-mono text-primary font-bold">#{prop.codigo}</span>
                                     <span>{prop.tipo}</span>
-                                    {prop.isRhemaProprio && (
+                                    {prop.corretorNome?.includes("Rhema") && (
                                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-emerald-500/40 text-emerald-600 bg-emerald-500/10 font-bold">
                                         🏢 Rhema
                                       </Badge>
@@ -1925,14 +1969,13 @@ export default function ImoviewIntegrationPage() {
                               </div>
                             </td>
                             <td className="p-3">
-                              {prop.isRhemaProprio ? (
+                              {prop.corretorNome ? (
                                 <div className="flex items-center gap-1.5 text-xs text-foreground font-semibold">
-                                  <Building2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                                  <span>Rhema (Camila)</span>
-                                </div>
-                              ) : prop.corretorNome ? (
-                                <div className="flex items-center gap-1.5 text-xs text-foreground font-semibold">
-                                  <UserCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  {prop.corretorNome.includes("Rhema") ? (
+                                    <Building2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                  ) : (
+                                    <UserCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  )}
                                   <span>{prop.corretorNome}</span>
                                 </div>
                               ) : (
@@ -1968,11 +2011,6 @@ export default function ImoviewIntegrationPage() {
                                 >
                                   {prop.finalidade}
                                 </Badge>
-                                {prop.isRhemaProprio && (
-                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/40 text-amber-600 bg-amber-500/10 font-bold">
-                                    🏢 Próprio
-                                  </Badge>
-                                )}
                               </div>
                               {(prop.valorCondominio || prop.valorIptu) && (
                                 <div className="text-[10px] text-muted-foreground mt-1 flex flex-col gap-0.5">
@@ -2016,7 +2054,9 @@ export default function ImoviewIntegrationPage() {
                             </td>
                             <td className="p-3">
                               <div className="font-semibold text-foreground text-xs">
-                                {prop.proprietarioNome || "Proprietário a Vincular"}
+                                {prop.proprietarioNome && !prop.proprietarioNome.includes("Rhema Imóveis")
+                                  ? prop.proprietarioNome
+                                  : (hasPhone ? "Proprietário" : "Proprietário a Vincular")}
                               </div>
                               <div className="text-[11px] font-mono flex items-center gap-1">
                                 {hasPhone ? (
