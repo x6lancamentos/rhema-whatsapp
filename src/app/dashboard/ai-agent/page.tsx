@@ -313,13 +313,13 @@ export default function AiAgentPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                Agente Autônomo de IA
+                Camila AI
                 <span className="text-xs bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold px-2.5 py-0.5 rounded-full border border-indigo-500/20">
                   OpenRouter & NVIDIA
                 </span>
               </h1>
               <p className="text-sm text-muted-foreground">
-                Atendimento humanizado para proprietários, extração inteligente e disparo para a recepção.
+                Especialista autônoma em relacionamento com proprietários, qualificação ativa SPIN Selling e atualização cadastral.
               </p>
             </div>
           </div>
@@ -431,7 +431,7 @@ export default function AiAgentPage() {
               <button
                 onClick={() =>
                   handleQuickPrompt(
-                    "Oi Amanda! O apto tá à venda sim, mas quero baixar pra 490 mil pra vender rápido. O condomínio agora foi pra 650."
+                    "Oi Camila! O apto tá à venda sim, mas quero baixar pra 490 mil pra vender rápido. O condomínio agora foi pra 650."
                   )
                 }
                 className="px-2.5 py-1 bg-white dark:bg-zinc-800 border rounded-full hover:border-indigo-500 text-xs transition"
@@ -463,10 +463,10 @@ export default function AiAgentPage() {
                   <div className="w-12 h-12 rounded-2xl bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3">
                     <Sparkles className="w-6 h-6" />
                   </div>
-                  <h3 className="font-semibold text-foreground mb-1">Simulador do Agente Rhema</h3>
+                  <h3 className="font-semibold text-foreground mb-1">Simulador da Camila AI</h3>
                   <p className="text-xs max-w-sm">
-                    Envie uma mensagem simulando ser o proprietário do imóvel Cód. {testCodigoImovel}. Veja como o modelo
-                    extrai os valores e prepara o aviso para a recepção!
+                    Envie uma mensagem simulando ser o proprietário do imóvel Cód. {testCodigoImovel}. Veja como a Camila
+                    conduz a conversa com SPIN Selling e extrai os dados!
                   </p>
                 </div>
               ) : (
@@ -482,7 +482,7 @@ export default function AiAgentPage() {
                         <span>{testContactName} (Proprietário)</span>
                       ) : (
                         <span className="text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1">
-                          <Bot className="w-3 h-3" /> Amanda (Rhema IA)
+                          <Bot className="w-3 h-3" /> Camila (Rhema IA)
                           {msg.latencyMs && (
                             <span className="text-[9px] bg-indigo-500/10 px-1.5 py-0.2 rounded text-indigo-500">
                               {msg.latencyMs}ms
@@ -509,7 +509,7 @@ export default function AiAgentPage() {
               {isSimulating && (
                 <div className="flex flex-col items-start">
                   <div className="text-[10px] text-indigo-500 font-semibold mb-1 px-1 flex items-center gap-1">
-                    <Bot className="w-3 h-3" /> Amanda (Digitando...)
+                    <Bot className="w-3 h-3" /> Camila (Digitando...)
                   </div>
                   <div className="bg-white dark:bg-zinc-800 border rounded-2xl rounded-tl-none px-4 py-3 shadow-sm flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce" />

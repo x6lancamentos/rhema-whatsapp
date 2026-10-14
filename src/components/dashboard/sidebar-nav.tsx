@@ -90,7 +90,7 @@ const navGroups: NavGroup[] = [
         label: "Automation",
         labelKey: "nav.group.automation",
         items: [
-            { href: "/dashboard/ai-agent", label: "Agente IA (NVIDIA)", labelKey: "nav.ai_agent" as any, icon: Sparkles },
+            { href: "/dashboard/ai-agent", label: "Camila AI", labelKey: "nav.ai_agent", icon: Sparkles },
             { href: "/dashboard/bot-settings", label: "Bot Settings", labelKey: "nav.bot_settings", icon: Bot },
             { href: "/dashboard/autoreply", label: "Auto Reply", labelKey: "nav.autoreply", icon: MessageCircleReply },
             { href: "/dashboard/profile", label: "Bot Profile", labelKey: "nav.profile", icon: UserCircle },
