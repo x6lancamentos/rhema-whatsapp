@@ -122,6 +122,7 @@ interface BroadcastLog {
   businessHoursOnly?: boolean;
   startHour?: number;
   endHour?: number;
+  enableAiAgent?: boolean;
   startedAt: string;
   completedAt: string | null;
   recipients?: BroadcastRecipient[];
@@ -233,6 +234,7 @@ export default function BroadcastPage() {
   const [businessHoursOnly, setBusinessHoursOnly] = useState(false);
   const [startHour, setStartHour] = useState(8);
   const [endHour, setEndHour] = useState(20);
+  const [enableAiAgent, setEnableAiAgent] = useState(false);
 
   // Delay & Anti-Ban Configuration
   const [minDelaySec, setMinDelaySec] = useState(15);
@@ -1279,6 +1281,7 @@ export default function BroadcastPage() {
         businessHoursOnly,
         startHour,
         endHour,
+        enableAiAgent,
       };
 
       const res = await fetch(`/api/messages/${sessionId}/broadcast`, {
@@ -2754,6 +2757,70 @@ export default function BroadcastPage() {
 
                       </CardContent>
                     </Card>
+
+                    {/* Card de Atendimento Autônomo com Camila AI (Exclusivo deste Disparo) */}
+                    <Card className={`border-border/60 shadow-sm transition-all ${enableAiAgent ? "border-purple-500/40 ring-1 ring-purple-500/30 bg-purple-50/5 dark:bg-purple-950/10" : ""}`}>
+                      <CardHeader className="py-3 px-5 bg-muted/20 border-b border-border/40">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm font-bold flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-purple-500" />
+                            Atendimento Autônomo com Camila AI (Exclusivo deste Disparo)
+                          </CardTitle>
+                          {enableAiAgent && (
+                            <Badge className="bg-purple-600 text-white font-semibold text-[10px] px-2 py-0.5">
+                              ✨ Agente Ativo
+                            </Badge>
+                          )}
+                        </div>
+                        <CardDescription className="text-xs mt-0.5">
+                          Conduza qualificação inteligente, atualização cadastral e agendamento de visitas com os leads que responderem.
+                        </CardDescription>
+                      </CardHeader>
+
+                      <CardContent className="pt-4 space-y-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="space-y-0.5">
+                            <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                              <span>Habilitar Camila AI para as respostas deste disparo</span>
+                              <Badge variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-500/30">
+                                Foco Restrito
+                              </Badge>
+                            </Label>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                              Quando ativado, a Camila AI atenderá <strong>apenas e exclusivamente</strong> os {contactsList.length} contatos desta lista de disparo. Todas as outras conversas e grupos no WhatsApp continuarão normais, sem interferência da IA.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={enableAiAgent}
+                            onCheckedChange={setEnableAiAgent}
+                            disabled={loading}
+                          />
+                        </div>
+
+                        {enableAiAgent && (
+                          <div className="p-3 bg-purple-50/40 dark:bg-purple-950/20 border border-purple-500/20 rounded-lg text-xs space-y-2 animate-in fade-in-50 duration-200">
+                            <div className="font-semibold text-purple-800 dark:text-purple-300 flex items-center gap-1.5">
+                              <Sparkles className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                              Como a Camila AI atuará nos leads deste disparo:
+                            </div>
+                            <ul className="text-[11px] text-purple-900/80 dark:text-purple-200/80 space-y-1.5 pl-4 list-disc">
+                              <li>
+                                <strong>SPIN Selling Consultivo:</strong> Responde de forma humanizada, investigando a situação atual do imóvel (disponível, vendido ou suspenso).
+                              </li>
+                              <li>
+                                <strong>Valores e Visitas:</strong> Confirma e atualiza valores de venda/locação, taxa de condomínio, IPTU e horários preferenciais para agendamento de visitas.
+                              </li>
+                              <li>
+                                <strong>Loop de Indicação:</strong> Ao finalizar a coleta, pergunta amigavelmente se o proprietário conhece alguém que também queira vender ou comprar imóvel.
+                              </li>
+                              <li>
+                                <strong>Alerta para a Recepção:</strong> Havendo qualquer atualização cadastral, gera automaticamente um relatório formatado no WhatsApp da recepção para sincronização no Imoview.
+                              </li>
+                            </ul>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
                 </div>
 
@@ -2855,6 +2922,41 @@ export default function BroadcastPage() {
                           {businessHoursOnly ? "Horário comercial ativo" : "Envio contínuo"}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Status do Agente de IA para a Campanha */}
+                    <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+                      enableAiAgent 
+                        ? "border-purple-500/40 bg-purple-50/20 dark:bg-purple-950/20 ring-1 ring-purple-500/20" 
+                        : "border-border/50 bg-background/80"
+                    }`}>
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          enableAiAgent 
+                            ? "bg-purple-500/20 text-purple-600 dark:text-purple-400" 
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            {enableAiAgent ? "Atendimento Autônomo com Camila AI Ativado" : "Camila AI Desativada"}
+                            {enableAiAgent && (
+                              <Badge variant="outline" className="text-[10px] text-purple-600 border-purple-500/40 font-semibold">
+                                Exclusivo Deste Disparo
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {enableAiAgent
+                              ? `A IA responderá e qualificará exclusivamente os ${contactsList.length} destinatários desta campanha.`
+                              : "As respostas dos destinatários serão atendidas manualmente pela sua equipe."}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className={enableAiAgent ? "bg-purple-600 text-white font-semibold text-xs" : "bg-muted text-muted-foreground text-xs"}>
+                        {enableAiAgent ? "Ativo" : "Manual"}
+                      </Badge>
                     </div>
 
                     {/* Resumo da Mensagem e Anexos */}
@@ -3490,6 +3592,12 @@ export default function BroadcastPage() {
                               </Badge>
                             )}
 
+                            {log.enableAiAgent && (
+                              <Badge variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-500/40 bg-purple-50/20 font-semibold flex items-center gap-1">
+                                <Sparkles className="h-2.5 w-2.5 text-purple-500" /> Camila AI
+                              </Badge>
+                            )}
+
                             {log.listName && (
                               <Badge variant="secondary" className="text-[10px]">
                                 📋 {log.listName}
@@ -3804,6 +3912,9 @@ export default function BroadcastPage() {
                     {Array.isArray(selectedLog?.sessionIds) && selectedLog.sessionIds.length > 1 && (
                       <span>• ⚡ Multi-Chip: <strong>{selectedLog.sessionIds.length} contas</strong></span>
                     )}
+                    {selectedLog?.enableAiAgent && (
+                      <span>• ✨ <strong className="text-purple-600 dark:text-purple-400">Camila AI Ativa</strong></span>
+                    )}
                   </DialogDescription>
                 </div>
 
@@ -4019,9 +4130,15 @@ export default function BroadcastPage() {
                               </td>
                               <td className="p-2.5">
                                 {r.status === "responded" ? (
-                                  <Badge className="text-[10px] bg-emerald-600 text-white font-semibold">
-                                    Respondeu 💬
-                                  </Badge>
+                                  selectedLog.enableAiAgent ? (
+                                    <Badge className="text-[10px] bg-purple-600 text-white font-semibold flex items-center gap-1">
+                                      <Sparkles className="h-2.5 w-2.5" /> Camila AI 💬
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="text-[10px] bg-emerald-600 text-white font-semibold">
+                                      Respondeu 💬
+                                    </Badge>
+                                  )
                                 ) : r.status === "sent" ? (
                                   <Badge variant="default" className="text-[10px] bg-emerald-600">
                                     Enviado ✓

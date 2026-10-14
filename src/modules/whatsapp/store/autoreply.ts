@@ -108,53 +108,128 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
             if (!text) continue;
 
             // ==========================================
-            // INTEGRAÇÃO AGENTE AUTÔNOMO DE IA (RHEMA)
+            // INTEGRAÇÃO AGENTE AUTÔNOMO DE IA (CAMILA AI)
             // ==========================================
             try {
-                const aiConfig = await getAiAgentConfig();
                 const prefix = (config as any)?.prefix || "#";
                 const isCommand = text.startsWith(prefix);
 
-                // O agente autônomo assume conversas individuais se estiver habilitado e não for comando manual
-                if (aiConfig.enabled && !isGroup && !fromMe && !isCommand) {
-                    logger.info("AIAgent", `Processando mensagem com Agente Autônomo para ${remoteJid}`);
-
-                    // Simular digitação humana
-                    if (aiConfig.simulateTypingDelay) {
-                        const minSec = aiConfig.minTypingSeconds || 3;
-                        const maxSec = aiConfig.maxTypingSeconds || 6;
-                        const delaySec = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
-                        await sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
-                        await new Promise(r => setTimeout(r, delaySec * 1000));
-                    }
-
+                // A Camila AI só atende conversas privadas (nunca grupos), que não sejam comandos e que não sejam nossas mensagens
+                if (!isGroup && !fromMe && !isCommand) {
                     const cleanPhone = remoteJid.replace(/@.*$/, "").replace(/\D/g, "");
-                    const pushName = msg.pushName || undefined;
 
-                    const aiResult = await processOwnerMessage({
-                        sessionId,
-                        jid: remoteJid,
-                        phone: cleanPhone,
-                        contactName: pushName,
-                        messageText: text,
-                        simulateOnly: false,
+                    // 1. Verifica se este contato pertence a um disparo com Camila AI habilitada
+                    const aiBroadcastRecipient = await prisma.broadcastRecipient.findFirst({
+                        where: {
+                            OR: [
+                                { jid: remoteJid },
+                                { jid: senderJid },
+                                { jid: `${cleanPhone}@s.whatsapp.net` },
+                            ],
+                            status: { in: ["sent", "responded"] },
+                            broadcastLog: {
+                                enableAiAgent: true,
+                            },
+                        },
+                        orderBy: { sentAt: "desc" },
+                        include: { broadcastLog: true },
                     });
 
-                    if (aiResult.replyText) {
-                        await sock.sendMessage(remoteJid, { text: aiResult.replyText }, { quoted: msg });
-                        logger.info("AIAgent", `Resposta enviada com sucesso para ${remoteJid}`);
+                    // 2. Ou se já possui uma conversa agêntica ativa em andamento
+                    let activeConv = null;
+                    if (!aiBroadcastRecipient) {
+                        activeConv = await prisma.aiAgentConversation.findFirst({
+                            where: {
+                                OR: [
+                                    { jid: remoteJid },
+                                    { phone: cleanPhone },
+                                ],
+                                status: "ACTIVE",
+                            },
+                        });
                     }
 
-                    if (aiConfig.simulateTypingDelay) {
-                        await sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
-                    }
+                    const shouldHandleWithAi = !!aiBroadcastRecipient || (!!activeConv && activeConv.status === "ACTIVE");
 
-                    // Mensagem tratada com sucesso pelo Agente de IA
-                    continue;
+                    if (shouldHandleWithAi) {
+                        const aiConfig = await getAiAgentConfig();
+                        const apiKey = (aiConfig.apiKey || process.env.OPENROUTER_API_KEY || "").trim();
+
+                        if (apiKey) {
+                            logger.info("AIAgent", `Lead de disparo detectado (${remoteJid}). Camila AI iniciando atendimento.`);
+
+                            // Atualiza status do destinatário no disparo como respondido
+                            if (aiBroadcastRecipient) {
+                                const isFirstResponse = aiBroadcastRecipient.status !== "responded";
+                                await prisma.broadcastRecipient.update({
+                                    where: { id: aiBroadcastRecipient.id },
+                                    data: {
+                                        status: "responded",
+                                        respondedAt: new Date(),
+                                        responseMessage: text,
+                                    },
+                                });
+
+                                if (isFirstResponse) {
+                                    await prisma.broadcastLog.update({
+                                        where: { id: aiBroadcastRecipient.broadcastLogId },
+                                        data: {
+                                            responded: { increment: 1 },
+                                        },
+                                    });
+
+                                    const io = (global as any).io;
+                                    if (io) {
+                                        io.to(sessionId).emit("broadcast.response", {
+                                            broadcastId: aiBroadcastRecipient.broadcastLogId,
+                                            recipientJid: remoteJid,
+                                            responseMessage: text,
+                                        });
+                                    }
+                                }
+                            }
+
+                            const recipientVars = (aiBroadcastRecipient?.variables as Record<string, any>) || {};
+                            const codigoImovel = recipientVars.codigo_imovel || recipientVars.codigo || recipientVars.imovel || undefined;
+                            const contactName = aiBroadcastRecipient?.name || recipientVars.nome || msg.pushName || undefined;
+
+                            // Simular digitação humana
+                            if (aiConfig.simulateTypingDelay) {
+                                const minSec = aiConfig.minTypingSeconds || 3;
+                                const maxSec = aiConfig.maxTypingSeconds || 6;
+                                const delaySec = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
+                                await sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+                                await new Promise(r => setTimeout(r, delaySec * 1000));
+                            }
+
+                            const aiResult = await processOwnerMessage({
+                                sessionId,
+                                jid: remoteJid,
+                                phone: cleanPhone,
+                                contactName,
+                                codigoImovelOverride: codigoImovel ? String(codigoImovel) : undefined,
+                                messageText: text,
+                                simulateOnly: false,
+                            });
+
+                            if (aiResult.replyText) {
+                                await sock.sendMessage(remoteJid, { text: aiResult.replyText }, { quoted: msg });
+                                logger.info("AIAgent", `Resposta da Camila AI enviada com sucesso para ${remoteJid}`);
+                            }
+
+                            if (aiConfig.simulateTypingDelay) {
+                                await sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+                            }
+
+                            // Mensagem tratada com sucesso pela Camila AI
+                            continue;
+                        } else {
+                            logger.warn("AIAgent", `Lead do disparo (${remoteJid}) respondeu, mas OpenRouter API Key não está configurada.`);
+                        }
+                    }
                 }
             } catch (err: any) {
-                logger.error("AIAgent", `Erro no processamento agêntico para ${remoteJid}:`, err);
-                // Continua para o fallback das regras estáticas se houver falha
+                logger.error("AIAgent", `Erro no processamento da Camila AI para ${remoteJid}:`, err);
             }
 
             try {

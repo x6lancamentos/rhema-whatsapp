@@ -38,6 +38,7 @@ const broadcastBodySchema = z
     businessHoursOnly: z.boolean().optional().default(false),
     startHour: z.number().optional().default(8),
     endHour: z.number().optional().default(20),
+    enableAiAgent: z.boolean().optional().default(false),
   })
   .refine(
     (data) =>
@@ -89,6 +90,7 @@ export async function POST(
       businessHoursOnly,
       startHour,
       endHour,
+      enableAiAgent,
     } = parseResult.data;
 
     // Check primary session access
@@ -232,6 +234,7 @@ export async function POST(
         businessHoursOnly,
         startHour,
         endHour,
+        enableAiAgent: !!enableAiAgent,
         status: isScheduled ? "scheduled" : "running",
         recipients: {
           create: filteredRecipients.map((r) => {

@@ -405,6 +405,7 @@ model BroadcastLog {
   businessHoursOnly Boolean       @default(false)     // Only send during business hours
   startHour   Int?                @default(8)
   endHour     Int?                @default(20)
+  enableAiAgent Boolean           @default(false)     // Habilita a Camila AI para interagir exclusivamente com as respostas deste disparo
   startedAt   DateTime            @default(now())
   completedAt DateTime?
 

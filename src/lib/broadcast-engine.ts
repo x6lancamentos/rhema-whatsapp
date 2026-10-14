@@ -296,6 +296,41 @@ export async function executeBroadcast(broadcastId: string): Promise<void> {
           },
         });
 
+        // Se Camila AI estiver ativada para este disparo, pré-carrega o contexto do imóvel/lead
+        if (log.enableAiAgent) {
+          try {
+            const cleanDigits = recipientPhone.replace(/\D/g, "");
+            const codigoImovel = vars.codigo_imovel || vars.codigo || vars.imovel || null;
+            if (cleanDigits) {
+              await prisma.imoviewContactContext.upsert({
+                where: { phone: cleanDigits },
+                update: {
+                  jid: recipient.jid,
+                  nome: recipient.name || vars.nome || undefined,
+                  ...(codigoImovel ? { codigoImovel: String(codigoImovel) } : {}),
+                  ...(vars.valor ? { valor: String(vars.valor) } : {}),
+                  ...(vars.condominio ? { valorCondominio: String(vars.condominio) } : {}),
+                  ...(vars.iptu ? { valorIptu: String(vars.iptu) } : {}),
+                  ...(vars.bairro ? { bairro: String(vars.bairro) } : {}),
+                },
+                create: {
+                  phone: cleanDigits,
+                  jid: recipient.jid,
+                  tipoRelacionamento: "proprietario",
+                  nome: recipient.name || vars.nome || "Proprietário",
+                  codigoImovel: codigoImovel ? String(codigoImovel) : null,
+                  valor: vars.valor ? String(vars.valor) : null,
+                  valorCondominio: vars.condominio ? String(vars.condominio) : null,
+                  valorIptu: vars.iptu ? String(vars.iptu) : null,
+                  bairro: vars.bairro ? String(vars.bairro) : null,
+                },
+              });
+            }
+          } catch (ctxErr) {
+            console.warn(`[BroadcastEngine] Error upserting ImoviewContactContext for ${recipient.jid}:`, ctxErr);
+          }
+        }
+
         // Automatic Imoview history recording
         const atendimentoId =
           recipient.imoviewAtendimentoId ||
