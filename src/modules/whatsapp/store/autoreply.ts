@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { WASocket } from "@whiskeysockets/baileys";
 import { normalizeMessageContent } from "@whiskeysockets/baileys";
 import { logger } from "@/lib/logger";
+import { getAiAgentConfig, processOwnerMessage } from "@/lib/ai/agent-service";
 
 // Helper for permission check (Deduplicate from command-handler if possible, but keep simple here)
 function canAutoReply(config: any, fromMe: boolean, senderJid: string): boolean {
@@ -105,6 +106,56 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
             const text = content?.conversation || content?.extendedTextMessage?.text || ""; // Caption?
 
             if (!text) continue;
+
+            // ==========================================
+            // INTEGRAÇÃO AGENTE AUTÔNOMO DE IA (RHEMA)
+            // ==========================================
+            try {
+                const aiConfig = await getAiAgentConfig();
+                const prefix = (config as any)?.prefix || "#";
+                const isCommand = text.startsWith(prefix);
+
+                // O agente autônomo assume conversas individuais se estiver habilitado e não for comando manual
+                if (aiConfig.enabled && !isGroup && !fromMe && !isCommand) {
+                    logger.info("AIAgent", `Processando mensagem com Agente Autônomo para ${remoteJid}`);
+
+                    // Simular digitação humana
+                    if (aiConfig.simulateTypingDelay) {
+                        const minSec = aiConfig.minTypingSeconds || 3;
+                        const maxSec = aiConfig.maxTypingSeconds || 6;
+                        const delaySec = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
+                        await sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+                        await new Promise(r => setTimeout(r, delaySec * 1000));
+                    }
+
+                    const cleanPhone = remoteJid.replace(/@.*$/, "").replace(/\D/g, "");
+                    const pushName = msg.pushName || undefined;
+
+                    const aiResult = await processOwnerMessage({
+                        sessionId,
+                        jid: remoteJid,
+                        phone: cleanPhone,
+                        contactName: pushName,
+                        messageText: text,
+                        simulateOnly: false,
+                    });
+
+                    if (aiResult.replyText) {
+                        await sock.sendMessage(remoteJid, { text: aiResult.replyText }, { quoted: msg });
+                        logger.info("AIAgent", `Resposta enviada com sucesso para ${remoteJid}`);
+                    }
+
+                    if (aiConfig.simulateTypingDelay) {
+                        await sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+                    }
+
+                    // Mensagem tratada com sucesso pelo Agente de IA
+                    continue;
+                }
+            } catch (err: any) {
+                logger.error("AIAgent", `Erro no processamento agêntico para ${remoteJid}:`, err);
+                // Continua para o fallback das regras estáticas se houver falha
+            }
 
             try {
                 // Fetch rules for this session

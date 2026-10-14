@@ -536,4 +536,91 @@ model ImoviewContactContext {
   @@index([corretorId])
 }
 
+// ==========================================
+// MÓDULO AGÊNTICO DE IA (OpenRouter / NVIDIA)
+// ==========================================
+
+// Configuração Global do Agente Autônomo
+model AiAgentConfig {
+  id                      String   @id @default("default")
+  enabled                 Boolean  @default(false)
+  apiKey                  String?  @db.Text
+  model                   String   @default("nvidia/llama-3.1-nemotron-70b-instruct")
+  receptionPhone          String?  // WhatsApp da recepção para envio de avisos de atualização
+  temperature             Float    @default(0.3)
+  systemPrompt            String?  @db.Text
+  notifyReceptionOnUpdate Boolean  @default(true)
+  autoRecordImoviewHistory Boolean @default(true)
+  simulateTypingDelay     Boolean  @default(true)
+  minTypingSeconds        Int      @default(3)
+  maxTypingSeconds        Int      @default(6)
+  fallbackModel           String   @default("meta-llama/llama-3.3-70b-instruct:free")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+// Conversa do Agente com Memória Cumulativa Progressiva (Rolling Summary)
+model AiAgentConversation {
+  id                  String               @id @default(cuid())
+  sessionId           String?              // Sessão do Baileys utilizada
+  jid                 String               // remoteJid do WhatsApp (ex: 5513999999999@s.whatsapp.net)
+  phone               String               // Telefone normalizado
+  contactName         String?
+  codigoImovel        String?              // Código do imóvel vinculado
+  status              String               @default("ACTIVE") // ACTIVE, PAUSED_BY_USER, HUMAN_TAKEOVER, COMPLETED
+  summary             String?              @db.Text // Resumo de contexto cumulativo atualizado a cada interação
+  lastExtractedData   Json?                // Último JSON estruturado extraído
+  receptionNotified   Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  messages            AiAgentMessage[]
+
+  @@unique([jid])
+  @@index([phone])
+  @@index([codigoImovel])
+  @@index([status])
+}
+
+// Histórico de mensagens individuais trocadas na conversa
+model AiAgentMessage {
+  id              String               @id @default(cuid())
+  conversationId  String
+  role            String               // user, assistant, system
+  content         String               @db.Text
+  rawMetadata     Json?
+  createdAt       DateTime             @default(now())
+
+  conversation    AiAgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+// Avisos de Atualização de Imóveis para a Recepção
+model AiPropertyUpdateNotice {
+  id                  String   @id @default(cuid())
+  conversationId      String?
+  codigoImovel        String
+  proprietarioNome    String?
+  proprietarioTelefone String
+  valorAnterior       String?
+  novoValor           String?
+  condominioAnterior  String?
+  novoCondominio      String?
+  statusImovel        String   @default("DISPONIVEL") // DISPONIVEL, VENDIDO_RHEMA, VENDIDO_OUTRA, SUSPENSO, DESISTIU
+  observacoes         String?  @db.Text
+  enviadoRecepcao     Boolean  @default(false)
+  recepcaoEnviadoEm   DateTime?
+  statusProcessamento String   @default("PENDENTE") // PENDENTE, CONCLUIDO_IMOVIEW, CANCELADO
+  resolvidoPor        String?
+  resolvidoEm         DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([codigoImovel])
+  @@index([statusProcessamento])
+  @@index([createdAt])
+}
+
 
