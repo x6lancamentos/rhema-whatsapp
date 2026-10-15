@@ -232,14 +232,26 @@ export default function AiAgentPage() {
         const now = Date.now();
         const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-        // Um balão por mensagem, como chega no WhatsApp; metadados ficam no último balão
-        const agentMsgs: ChatMessage[] = parts.map((part, idx) => {
+        // Atualiza a memória contínua e dados extraídos no painel lateral
+        setCurrentRollingSummary(out.rollingSummary);
+        setLatestExtracted({ ...out, ...(out.collectedData || {}), collectedData: out.collectedData });
+
+        // Cadência de digitação humana: entrega balão por balão mantendo o indicador de digitação entre eles
+        for (let idx = 0; idx < parts.length; idx++) {
+          const part = parts[idx];
           const isLast = idx === parts.length - 1;
-          return {
+
+          if (idx > 0) {
+            // Entre balões: mantém "Camila (Digitando...)" ativo por um tempo realista (2.0s a 3.5s)
+            const typingDelay = Math.min(3500, Math.max(2000, Math.round((part.length / 22) * 1000)));
+            await new Promise((r) => setTimeout(r, typingDelay));
+          }
+
+          const msg: ChatMessage = {
             id: (now + 1 + idx).toString(),
             role: "assistant",
             content: part,
-            timestamp,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             ...(isLast
               ? {
                   latencyMs: out.latencyMs,
@@ -258,12 +270,9 @@ export default function AiAgentPage() {
                 }
               : {}),
           };
-        });
 
-        setChatMessages((prev) => [...prev, ...agentMsgs]);
-        setCurrentRollingSummary(out.rollingSummary);
-        // Mantém a saída completa (para os cards) + o estado acumulado (enviado no próximo turno)
-        setLatestExtracted({ ...out, ...(out.collectedData || {}), collectedData: out.collectedData });
+          setChatMessages((prev) => [...prev, msg]);
+        }
       } else {
         const errMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),

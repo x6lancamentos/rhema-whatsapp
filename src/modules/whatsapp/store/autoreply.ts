@@ -80,9 +80,9 @@ const camilaBuffers = new Map<string, CamilaBuffer>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Tempo de digitação proporcional ao tamanho do texto (~18 caracteres/segundo), dentro dos limites configurados */
-function typingDelayMs(text: string, minSec: number, maxSec: number): number {
-    const estimated = (text.length / 18) * 1000;
+/** Tempo de digitação proporcional ao tamanho do texto (~16 caracteres/segundo), dentro dos limites configurados */
+function typingDelayMs(text: string, minSec: number = 2.5, maxSec: number = 6): number {
+    const estimated = (text.length / 16) * 1000;
     const clamped = Math.min(maxSec * 1000, Math.max(minSec * 1000, estimated));
     return Math.round(clamped * (0.85 + Math.random() * 0.3));
 }
@@ -117,12 +117,23 @@ async function flushCamila(jid: string) {
 
     try {
         const aiConfig = await getAiAgentConfig();
-        const minSec = aiConfig.minTypingSeconds || 3;
+        const minSec = aiConfig.minTypingSeconds || 2.5;
         const maxSec = aiConfig.maxTypingSeconds || 6;
 
-        if (aiConfig.simulateTypingDelay) {
-            await sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+        // Lista de JIDs para garantir que a presença seja enviada tanto no remoteJid quanto no JID numérico padrão
+        const presenceJids = [remoteJid];
+        if (cleanPhone && `${cleanPhone}@s.whatsapp.net` !== remoteJid) {
+            presenceJids.push(`${cleanPhone}@s.whatsapp.net`);
         }
+
+        const setPresence = async (presence: 'composing' | 'paused') => {
+            for (const pj of presenceJids) {
+                await sock.sendPresenceUpdate(presence, pj).catch(() => {});
+            }
+        };
+
+        // Ativa presença enquanto a IA pensa/processa
+        await setPresence('composing');
 
         const startedAt = Date.now();
         const aiResult = await processOwnerMessage({
@@ -134,27 +145,36 @@ async function flushCamila(jid: string) {
             messageText: combinedText,
             simulateOnly: false,
         });
-        const aiElapsed = Date.now() - startedAt;
 
         const parts = aiResult.replyParts?.length ? aiResult.replyParts : [aiResult.replyText].filter(Boolean);
 
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
-            if (aiConfig.simulateTypingDelay) {
-                await sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
-                let delay = typingDelayMs(part, minSec, maxSec);
-                // No primeiro balão, o tempo de resposta da IA já conta como "digitando"
-                if (i === 0) delay = Math.max(800, delay - aiElapsed);
-                await sleep(delay);
+
+            if (i === 0) {
+                // Primeiro balão: garante que o contato veja "digitando..." por um tempo humano (2s a 3.5s)
+                await setPresence('composing');
+                const firstDelay = Math.min(3500, Math.max(2000, typingDelayMs(part, 2, 3.5)));
+                await sleep(firstDelay);
+            } else {
+                // Balões subsequentes (cadência humana entre múltiplos balões):
+                // 1. Pausa natural pós-envio do balão anterior (1.0s a 1.5s)
+                await sleep(1000 + Math.random() * 500);
+
+                // 2. Dispara status de digitando no WhatsApp
+                await setPresence('composing');
+
+                // 3. Tempo de digitação proporcional ao tamanho do texto (2.5s a 5.5s)
+                const interBubbleDelay = typingDelayMs(part, minSec, maxSec);
+                await sleep(interBubbleDelay);
             }
+
             await sock.sendMessage(remoteJid, { text: part });
         }
 
-        if (aiConfig.simulateTypingDelay) {
-            await sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
-        }
+        await setPresence('paused');
 
-        logger.info("AIAgent", `Camila AI respondeu ${remoteJid} em ${parts.length} balão(ões).`);
+        logger.info("AIAgent", `Camila AI respondeu ${remoteJid} em ${parts.length} balão(ões) com cadência realista.`);
     } catch (err: any) {
         logger.error("AIAgent", `Erro no processamento da Camila AI para ${remoteJid}:`, err);
     } finally {
