@@ -398,6 +398,41 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     sanitizedParts = ["Obrigada pelo retorno! Vou passar as informações pra equipe."];
   }
 
+  // 4. GARANTIA PROGRAMÁTICA: NO MÁXIMO UMA PERGUNTA POR TURNO
+  // Se a IA gerou mais de um balão com ponto de interrogação '?' (ex: visitas no balão 1 e indicação no balão 2),
+  // descarta perguntas adicionais prematuras para não sobrecarregar o proprietário.
+  if (sanitizedParts.length > 1) {
+    const partsWithQuestion = sanitizedParts.filter((p) => p.includes("?"));
+    if (partsWithQuestion.length > 1) {
+      const filtered: string[] = [];
+      let questionKept = false;
+      for (const p of sanitizedParts) {
+        if (p.includes("?")) {
+          if (!questionKept) {
+            filtered.push(p);
+            questionKept = true;
+          }
+        } else {
+          filtered.push(p);
+        }
+      }
+      sanitizedParts = filtered.length > 0 ? filtered : sanitizedParts.slice(0, 1);
+    }
+  }
+
+  // 5. Se sobrou apenas 1 balão com reação curta seguida da pergunta:
+  // (Ex: "Show, valor mantido. E quanto a visitas? Quais dias e horários costumam funcionar melhor?")
+  // Separa elegantemente em 2 balões (Balão 1: reação / Balão 2: pergunta)
+  if (sanitizedParts.length === 1 && sanitizedParts[0].includes("?")) {
+    const text = sanitizedParts[0];
+    const match = text.match(
+      /^([^.!?\n]+[.!?])\s+((?:E quanto|Quanto|Sobre|Pra visitas|Para visitas|E me|Qual|Quais|Quando|Como|Você|Voce|Aproveitando)[\s\S]+\?)$/i
+    );
+    if (match && match[1].length < 60) {
+      sanitizedParts = [match[1].trim(), match[2].trim()];
+    }
+  }
+
   const replyParts = sanitizedParts;
   const replyText = replyParts.join("\n\n");
 
