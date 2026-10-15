@@ -13,6 +13,16 @@ export interface AgentProcessInput {
   messageText: string;
   simulateOnly?: boolean; // Se true, não grava no banco real nem envia WA real (usado no playground)
   codigoImovelOverride?: string;
+  historyOverride?: Array<{ role: "user" | "assistant"; content: string }>;
+  rollingSummaryOverride?: string;
+  collectedDataOverride?: {
+    propertyStatus?: string | null;
+    newValue?: string | null;
+    newCondo?: string | null;
+    newIptu?: string | null;
+    visitingHours?: string | null;
+    referral?: string | null;
+  };
 }
 
 export interface AgentProcessOutput {
@@ -27,6 +37,14 @@ export interface AgentProcessOutput {
   notes?: string;
   needsReceptionAlert: boolean;
   rollingSummary: string;
+  collectedData?: {
+    propertyStatus?: string | null;
+    newValue?: string | null;
+    newCondo?: string | null;
+    newIptu?: string | null;
+    visitingHours?: string | null;
+    referral?: string | null;
+  };
   receptionMessageText?: string;
   receptionNotified: boolean;
   modelUsed: string;
@@ -167,32 +185,71 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
 
   // Buscar histórico de conversa existente e o Rolling Summary acumulado
   let existingConv: any = null;
-  let previousMessages: any[] = [];
+  let previousMessages: Array<{ role: string; content: string }> = [];
+  let hadBroadcastInitial = false;
+  let broadcastInitialText = "";
 
-  if (!input.simulateOnly) {
+  if (input.historyOverride && input.historyOverride.length > 0) {
+    // Modo simulação ou histórico fornecido explicitamente
+    previousMessages = [...input.historyOverride];
+  } else if (!input.simulateOnly) {
     try {
       existingConv = await prisma.aiAgentConversation.findUnique({
         where: { jid: input.jid },
         include: {
           messages: {
             orderBy: { createdAt: "desc" },
-            take: 6, // Últimas mensagens para fluidez imediata
+            take: 20, // Aumentado de 6 para 20 mensagens para manter memória contínua
           },
         },
       });
 
-      if (existingConv?.messages) {
-        previousMessages = [...existingConv.messages].reverse();
+      if (existingConv?.messages && existingConv.messages.length > 0) {
+        previousMessages = [...existingConv.messages].reverse().map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+      } else {
+        // Se ainda não há mensagens salvas nesta conversa, verificar se o contato recebeu um disparo ativo de broadcast
+        try {
+          const lastBroadcast = await prisma.broadcastRecipient.findFirst({
+            where: {
+              OR: [
+                { jid: input.jid },
+                { jid: `${cleanPhone}@s.whatsapp.net` },
+              ],
+              status: { in: ["sent", "responded"] },
+              resolvedMessage: { not: null },
+            },
+            orderBy: { sentAt: "desc" },
+          });
+
+          if (lastBroadcast?.resolvedMessage) {
+            hadBroadcastInitial = true;
+            broadcastInitialText = lastBroadcast.resolvedMessage;
+            previousMessages.push({
+              role: "assistant",
+              content: lastBroadcast.resolvedMessage,
+            });
+          }
+        } catch (bErr) {
+          logger.warn("AIAgent", "Erro ao buscar mensagem de broadcast inicial:", bErr);
+        }
       }
     } catch (err) {
       logger.warn("AIAgent", "Erro ao buscar conversa anterior:", err);
     }
   }
 
-  const rollingSummary = existingConv?.summary || "";
+  const rollingSummary = input.rollingSummaryOverride || existingConv?.summary || "";
+  const initialCollectedData =
+    input.collectedDataOverride ||
+    (existingConv?.lastExtractedData as any) ||
+    {};
+
   const codigoImovel = input.codigoImovelOverride || cachedContext?.codigoImovel || existingConv?.codigoImovel || null;
 
-  // Montar System Prompt especializado com dados reais e Rolling Summary
+  // Montar System Prompt especializado com dados reais, Rolling Summary e Estado Acumulado
   const systemPrompt = buildOwnerContextPrompt({
     contactName: input.contactName || cachedContext?.nome || existingConv?.contactName,
     phone: input.phone,
@@ -207,6 +264,7 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     corretorCaptador: cachedContext?.corretorNome,
     rollingSummary,
     customSystemPrompt: config.systemPrompt,
+    collectedData: initialCollectedData,
   });
 
   // Montar fila de mensagens para a IA
@@ -272,14 +330,27 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     };
   }
 
+  // Mesclagem CUMULATIVA do estado extraído (para nunca perder valor, horários ou indicações já informados)
+  const mergedCollectedData = {
+    propertyStatus:
+      parsed.propertyStatus && parsed.propertyStatus !== "INALTERADO"
+        ? parsed.propertyStatus
+        : initialCollectedData.propertyStatus || "DISPONIVEL",
+    newValue: parsed.newValue || initialCollectedData.newValue || null,
+    newCondo: parsed.newCondo || initialCollectedData.newCondo || null,
+    newIptu: parsed.newIptu || initialCollectedData.newIptu || null,
+    visitingHours: parsed.visitingHours || initialCollectedData.visitingHours || null,
+    referral: parsed.referral || initialCollectedData.referral || null,
+  };
+
   const replyText = parsed.replyToOwner || "Obrigado pelo seu retorno! Já estamos registrando tudo por aqui.";
-  const isPropertyUpdate = Boolean(parsed.isPropertyUpdate);
-  const propertyStatus = parsed.propertyStatus || "INALTERADO";
-  const newValue = parsed.newValue || null;
-  const newCondo = parsed.newCondo || null;
-  const newIptu = parsed.newIptu || null;
-  const visitingHours = parsed.visitingHours || null;
-  const referral = parsed.referral || null;
+  const isPropertyUpdate = Boolean(parsed.isPropertyUpdate || mergedCollectedData.newValue || mergedCollectedData.newCondo);
+  const propertyStatus = mergedCollectedData.propertyStatus || "INALTERADO";
+  const newValue = mergedCollectedData.newValue;
+  const newCondo = mergedCollectedData.newCondo;
+  const newIptu = mergedCollectedData.newIptu;
+  const visitingHours = mergedCollectedData.visitingHours;
+  const referral = mergedCollectedData.referral;
   const notes = parsed.notes || "";
 
   let enrichedNotes = notes;
@@ -328,7 +399,7 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
   // Se não for modo de simulação, persistir dados no banco de dados
   if (!input.simulateOnly) {
     try {
-      // 1. Atualizar ou criar conversa
+      // 1. Atualizar ou criar conversa preservando estado acumulado
       const conv = await prisma.aiAgentConversation.upsert({
         where: { jid: input.jid },
         create: {
@@ -339,33 +410,43 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
           codigoImovel,
           status: "ACTIVE",
           summary: updatedRollingSummary,
-          lastExtractedData: parsed,
+          lastExtractedData: mergedCollectedData,
           receptionNotified: false,
         },
         update: {
           sessionId: input.sessionId || undefined,
           summary: updatedRollingSummary,
-          lastExtractedData: parsed,
+          lastExtractedData: mergedCollectedData,
           codigoImovel: codigoImovel || undefined,
           updatedAt: new Date(),
         },
       });
 
       // 2. Salvar histórico das mensagens
+      const msgsToCreate: any[] = [];
+      if (hadBroadcastInitial && broadcastInitialText) {
+        msgsToCreate.push({
+          conversationId: conv.id,
+          role: "assistant",
+          content: broadcastInitialText,
+        });
+      }
+      msgsToCreate.push(
+        {
+          conversationId: conv.id,
+          role: "user",
+          content: input.messageText,
+        },
+        {
+          conversationId: conv.id,
+          role: "assistant",
+          content: replyText,
+          rawMetadata: parsed,
+        }
+      );
+
       await prisma.aiAgentMessage.createMany({
-        data: [
-          {
-            conversationId: conv.id,
-            role: "user",
-            content: input.messageText,
-          },
-          {
-            conversationId: conv.id,
-            role: "assistant",
-            content: replyText,
-            rawMetadata: parsed,
-          },
-        ],
+        data: msgsToCreate,
       });
 
       // 3. Se houver atualização para a recepção, criar aviso
@@ -435,6 +516,7 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     notes: enrichedNotes,
     needsReceptionAlert,
     rollingSummary: updatedRollingSummary,
+    collectedData: mergedCollectedData,
     receptionMessageText,
     receptionNotified,
     modelUsed: aiResult.modelUsed,

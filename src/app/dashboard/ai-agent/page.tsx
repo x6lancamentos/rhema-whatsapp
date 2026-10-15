@@ -202,6 +202,11 @@ export default function AiAgentPage() {
 
     setChatMessages((prev) => [...prev, userMsg]);
     setInputMessage("");
+    const historyPayload = chatMessages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     setIsSimulating(true);
 
     try {
@@ -213,6 +218,9 @@ export default function AiAgentPage() {
           contactName: testContactName,
           phone: testPhone,
           codigoImovel: testCodigoImovel,
+          history: historyPayload,
+          rollingSummary: currentRollingSummary,
+          collectedData: latestExtracted?.collectedData || latestExtracted,
         }),
       });
 
@@ -242,7 +250,7 @@ export default function AiAgentPage() {
 
         setChatMessages((prev) => [...prev, agentMsg]);
         setCurrentRollingSummary(out.rollingSummary);
-        setLatestExtracted(out);
+        setLatestExtracted(out.collectedData || out);
       } else {
         const errMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),

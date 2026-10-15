@@ -19,6 +19,9 @@ export async function POST(req: NextRequest) {
       codigoImovelOverride: body.codigoImovel || "4820",
       messageText: body.messageText.trim(),
       simulateOnly: true, // Garante que é ambiente seguro de simulação sem disparar WhatsApp real
+      historyOverride: Array.isArray(body.history) ? body.history : undefined,
+      rollingSummaryOverride: typeof body.rollingSummary === "string" ? body.rollingSummary : undefined,
+      collectedDataOverride: body.collectedData && typeof body.collectedData === "object" ? body.collectedData : undefined,
     });
 
     return NextResponse.json({
