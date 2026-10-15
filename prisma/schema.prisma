@@ -624,4 +624,22 @@ model AiPropertyUpdateNotice {
   @@index([createdAt])
 }
 
+// Lista e Cadastro Específico de Corretores (Suporte & Contato)
+model BrokerContact {
+  id            String   @id @default(cuid())
+  nome          String
+  telefone      String   // WhatsApp formatado ou dígitos (ex: 5513999998888)
+  email         String?
+  imoviewCodigo String?  // Código identificador no Imoview
+  equipe        String?  // Ex: Vendas, Locação, Lançamentos
+  ativo         Boolean  @default(true)
+  observacoes   String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([imoviewCodigo])
+  @@index([telefone])
+  @@index([ativo])
+}
+
 

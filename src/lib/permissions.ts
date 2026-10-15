@@ -34,7 +34,8 @@ export type PermissionKey =
   | "users.manage"
   | "users.manage_permissions"
   | "reports.view_team_productivity"
-  | "chat.superadmin_audit";
+  | "chat.superadmin_audit"
+  | "management.broker_support_radar";
 
 export interface PermissionDefinition {
   key: PermissionKey;
@@ -187,6 +188,12 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: "Permite ao gerente/superadmin auditar conversas de leads originados de disparos da plataforma para QA e follow-up.",
     category: "management",
   },
+  {
+    key: "management.broker_support_radar",
+    label: "Radar & Suporte a Corretores",
+    description: "Acesso exclusivo ao Cockpit de Gestão para cruzar novos imóveis com leads quentes, acompanhar cadência de corretores e despachar oportunidades via WhatsApp.",
+    category: "management",
+  },
 ];
 
 // Default configurations per role
@@ -213,6 +220,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage_permissions": true,
     "reports.view_team_productivity": true,
     "chat.superadmin_audit": true,
+    "management.broker_support_radar": true,
   },
   ADMIN: {
     "whatsapp.view_sessions": true,
@@ -236,6 +244,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage_permissions": true,
     "reports.view_team_productivity": true,
     "chat.superadmin_audit": false,
+    "management.broker_support_radar": true,
   },
   OWNER: {
     "whatsapp.view_sessions": true,
@@ -259,6 +268,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage_permissions": true,
     "reports.view_team_productivity": true,
     "chat.superadmin_audit": false,
+    "management.broker_support_radar": true,
   },
   PRE_VENDAS: {
     // Camila (Pré-Vendas / Recepção):
@@ -284,6 +294,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage_permissions": false,
     "reports.view_team_productivity": false,
     "chat.superadmin_audit": false,
+    "management.broker_support_radar": false,
   },
   CORRETOR: {
     // Corretor:
@@ -309,6 +320,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage_permissions": false,
     "reports.view_team_productivity": false,
     "chat.superadmin_audit": false,
+    "management.broker_support_radar": false,
   },
   STAFF: {
     "whatsapp.view_sessions": true,
@@ -332,6 +344,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Record<PermissionKey, boolea
     "users.manage_permissions": false,
     "reports.view_team_productivity": false,
     "chat.superadmin_audit": false,
+    "management.broker_support_radar": false,
   },
 };
 

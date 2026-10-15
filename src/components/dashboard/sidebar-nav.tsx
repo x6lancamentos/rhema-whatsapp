@@ -30,6 +30,7 @@ import {
     UserPlus,
     Building2,
     Sparkles,
+    Compass,
 } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
 import { useLanguage } from "@/components/language-provider";
@@ -74,6 +75,7 @@ const navGroups: NavGroup[] = [
             { href: "/dashboard/broadcast", label: "Broadcast", labelKey: "nav.broadcast", icon: Megaphone },
             { href: "/dashboard/templates", label: "Modelos", labelKey: "nav.templates", icon: FileText },
             { href: "/dashboard/imoview", label: "Imoview CRM", labelKey: "nav.imoview", icon: Building2 },
+            { href: "/dashboard/broker-radar", label: "Suporte a Corretores", labelKey: "nav.broker_radar", icon: Compass, allowedRoles: ["SUPERADMIN", "ADMIN"] },
             { href: "/dashboard/sticker", label: "Sticker Maker", labelKey: "nav.sticker", icon: ImageIcon },
         ],
     },
