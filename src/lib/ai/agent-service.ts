@@ -265,6 +265,7 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     rollingSummary,
     customSystemPrompt: config.systemPrompt,
     collectedData: initialCollectedData,
+    isOngoingConversation: previousMessages.length > 0,
   });
 
   // Montar fila de mensagens para a IA
