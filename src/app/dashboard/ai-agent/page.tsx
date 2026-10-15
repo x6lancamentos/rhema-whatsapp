@@ -228,29 +228,42 @@ export default function AiAgentPage() {
 
       if (data.success && data.data) {
         const out = data.data;
-        const agentMsg: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: out.replyText,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          latencyMs: out.latencyMs,
-          extracted: {
-            isPropertyUpdate: out.isPropertyUpdate,
-            propertyStatus: out.propertyStatus,
-            newValue: out.newValue,
-            newCondo: out.newCondo,
-            visitingHours: out.visitingHours,
-            referral: out.referral,
-            notes: out.notes,
-            needsReceptionAlert: out.needsReceptionAlert,
-          },
-          rollingSummary: out.rollingSummary,
-          receptionMessageText: out.receptionMessageText,
-        };
+        const parts: string[] = Array.isArray(out.replyParts) && out.replyParts.length > 0 ? out.replyParts : [out.replyText];
+        const now = Date.now();
+        const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-        setChatMessages((prev) => [...prev, agentMsg]);
+        // Um balão por mensagem, como chega no WhatsApp; metadados ficam no último balão
+        const agentMsgs: ChatMessage[] = parts.map((part, idx) => {
+          const isLast = idx === parts.length - 1;
+          return {
+            id: (now + 1 + idx).toString(),
+            role: "assistant",
+            content: part,
+            timestamp,
+            ...(isLast
+              ? {
+                  latencyMs: out.latencyMs,
+                  extracted: {
+                    isPropertyUpdate: out.isPropertyUpdate,
+                    propertyStatus: out.propertyStatus,
+                    newValue: out.newValue,
+                    newCondo: out.newCondo,
+                    visitingHours: out.visitingHours,
+                    referral: out.referral,
+                    notes: out.notes,
+                    needsReceptionAlert: out.needsReceptionAlert,
+                  },
+                  rollingSummary: out.rollingSummary,
+                  receptionMessageText: out.receptionMessageText,
+                }
+              : {}),
+          };
+        });
+
+        setChatMessages((prev) => [...prev, ...agentMsgs]);
         setCurrentRollingSummary(out.rollingSummary);
-        setLatestExtracted(out.collectedData || out);
+        // Mantém a saída completa (para os cards) + o estado acumulado (enviado no próximo turno)
+        setLatestExtracted({ ...out, ...(out.collectedData || {}), collectedData: out.collectedData });
       } else {
         const errMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),

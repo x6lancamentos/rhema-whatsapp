@@ -52,6 +52,124 @@ function canAutoReply(config: any, fromMe: boolean, senderJid: string): boolean 
     return false;
 }
 
+// ==========================================
+// CADÊNCIA HUMANA DA CAMILA AI
+// ==========================================
+// Proprietários costumam mandar várias mensagens seguidas ("Oi" / "continua sim" / "850 mil").
+// Em vez de responder cada uma separadamente, a Camila espera a pessoa terminar de digitar
+// e responde tudo de uma vez, como um humano faria.
+const CAMILA_DEBOUNCE_MS = 8000;
+
+type CamilaContext = {
+    sock: WASocket;
+    sessionId: string;
+    remoteJid: string;
+    cleanPhone: string;
+    contactName?: string;
+    codigoImovel?: string;
+};
+
+type CamilaBuffer = {
+    texts: string[];
+    timer: ReturnType<typeof setTimeout> | null;
+    processing: boolean;
+    ctx: CamilaContext;
+};
+
+const camilaBuffers = new Map<string, CamilaBuffer>();
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Tempo de digitação proporcional ao tamanho do texto (~18 caracteres/segundo), dentro dos limites configurados */
+function typingDelayMs(text: string, minSec: number, maxSec: number): number {
+    const estimated = (text.length / 18) * 1000;
+    const clamped = Math.min(maxSec * 1000, Math.max(minSec * 1000, estimated));
+    return Math.round(clamped * (0.85 + Math.random() * 0.3));
+}
+
+function queueCamilaMessage(ctx: CamilaContext, text: string) {
+    let entry = camilaBuffers.get(ctx.remoteJid);
+    if (!entry) {
+        entry = { texts: [], timer: null, processing: false, ctx };
+        camilaBuffers.set(ctx.remoteJid, entry);
+    }
+    entry.ctx = ctx;
+    entry.texts.push(text);
+
+    // Se a Camila já está respondendo, a mensagem nova entra no próximo ciclo
+    if (entry.processing) return;
+
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => {
+        flushCamila(ctx.remoteJid).catch((err) => logger.error("AIAgent", "Erro no flush da Camila AI:", err));
+    }, CAMILA_DEBOUNCE_MS);
+}
+
+async function flushCamila(jid: string) {
+    const entry = camilaBuffers.get(jid);
+    if (!entry || entry.processing || entry.texts.length === 0) return;
+
+    entry.timer = null;
+    entry.processing = true;
+    const combinedText = entry.texts.join("\n");
+    entry.texts = [];
+    const { sock, sessionId, remoteJid, cleanPhone, contactName, codigoImovel } = entry.ctx;
+
+    try {
+        const aiConfig = await getAiAgentConfig();
+        const minSec = aiConfig.minTypingSeconds || 3;
+        const maxSec = aiConfig.maxTypingSeconds || 6;
+
+        if (aiConfig.simulateTypingDelay) {
+            await sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+        }
+
+        const startedAt = Date.now();
+        const aiResult = await processOwnerMessage({
+            sessionId,
+            jid: remoteJid,
+            phone: cleanPhone,
+            contactName,
+            codigoImovelOverride: codigoImovel,
+            messageText: combinedText,
+            simulateOnly: false,
+        });
+        const aiElapsed = Date.now() - startedAt;
+
+        const parts = aiResult.replyParts?.length ? aiResult.replyParts : [aiResult.replyText].filter(Boolean);
+
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            if (aiConfig.simulateTypingDelay) {
+                await sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+                let delay = typingDelayMs(part, minSec, maxSec);
+                // No primeiro balão, o tempo de resposta da IA já conta como "digitando"
+                if (i === 0) delay = Math.max(800, delay - aiElapsed);
+                await sleep(delay);
+            }
+            await sock.sendMessage(remoteJid, { text: part });
+        }
+
+        if (aiConfig.simulateTypingDelay) {
+            await sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+        }
+
+        logger.info("AIAgent", `Camila AI respondeu ${remoteJid} em ${parts.length} balão(ões).`);
+    } catch (err: any) {
+        logger.error("AIAgent", `Erro no processamento da Camila AI para ${remoteJid}:`, err);
+    } finally {
+        entry.processing = false;
+        if (entry.texts.length > 0) {
+            // Chegaram mensagens enquanto a Camila respondia: processa em seguida
+            entry.timer = setTimeout(() => {
+                flushCamila(jid).catch((err) => logger.error("AIAgent", "Erro no flush da Camila AI:", err));
+            }, CAMILA_DEBOUNCE_MS / 2);
+        } else {
+            camilaBuffers.delete(jid);
+        }
+    }
+}
+
 export async function bindAutoReply(sock: WASocket, sessionId: string) {
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
@@ -149,6 +267,21 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
                         });
                     }
 
+                    // 3. Contatos que pediram para sair ou que estão com um consultor humano: Camila fica em silêncio
+                    const pausedConv = await prisma.aiAgentConversation.findFirst({
+                        where: {
+                            OR: [
+                                { jid: remoteJid },
+                                { phone: cleanPhone },
+                            ],
+                            status: { in: ["OPTED_OUT", "HUMAN_TAKEOVER", "PAUSED_BY_USER"] },
+                        },
+                    });
+                    if (pausedConv) {
+                        logger.info("AIAgent", `Contato ${remoteJid} com status ${pausedConv.status}. Camila AI não responde.`);
+                        continue;
+                    }
+
                     const shouldHandleWithAi = !!aiBroadcastRecipient || (!!activeConv && activeConv.status === "ACTIVE");
 
                     if (shouldHandleWithAi) {
@@ -193,35 +326,20 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
                             const codigoImovel = recipientVars.codigo_imovel || recipientVars.codigo || recipientVars.imovel || undefined;
                             const contactName = aiBroadcastRecipient?.name || recipientVars.nome || msg.pushName || undefined;
 
-                            // Simular digitação humana
-                            if (aiConfig.simulateTypingDelay) {
-                                const minSec = aiConfig.minTypingSeconds || 3;
-                                const maxSec = aiConfig.maxTypingSeconds || 6;
-                                const delaySec = Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
-                                await sock.sendPresenceUpdate('composing', remoteJid).catch(() => {});
-                                await new Promise(r => setTimeout(r, delaySec * 1000));
-                            }
+                            // Agrupa mensagens seguidas e responde com cadência humana (ver queueCamilaMessage)
+                            queueCamilaMessage(
+                                {
+                                    sock,
+                                    sessionId,
+                                    remoteJid,
+                                    cleanPhone,
+                                    contactName,
+                                    codigoImovel: codigoImovel ? String(codigoImovel) : undefined,
+                                },
+                                text
+                            );
 
-                            const aiResult = await processOwnerMessage({
-                                sessionId,
-                                jid: remoteJid,
-                                phone: cleanPhone,
-                                contactName,
-                                codigoImovelOverride: codigoImovel ? String(codigoImovel) : undefined,
-                                messageText: text,
-                                simulateOnly: false,
-                            });
-
-                            if (aiResult.replyText) {
-                                await sock.sendMessage(remoteJid, { text: aiResult.replyText }, { quoted: msg });
-                                logger.info("AIAgent", `Resposta da Camila AI enviada com sucesso para ${remoteJid}`);
-                            }
-
-                            if (aiConfig.simulateTypingDelay) {
-                                await sock.sendPresenceUpdate('paused', remoteJid).catch(() => {});
-                            }
-
-                            // Mensagem tratada com sucesso pela Camila AI
+                            // Mensagem encaminhada para a Camila AI
                             continue;
                         } else {
                             logger.warn("AIAgent", `Lead do disparo (${remoteJid}) respondeu, mas OpenRouter API Key não está configurada.`);

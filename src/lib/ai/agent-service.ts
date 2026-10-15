@@ -17,6 +17,7 @@ export interface AgentProcessInput {
   rollingSummaryOverride?: string;
   collectedDataOverride?: {
     propertyStatus?: string | null;
+    priceConfirmed?: boolean | null;
     newValue?: string | null;
     newCondo?: string | null;
     newIptu?: string | null;
@@ -27,6 +28,9 @@ export interface AgentProcessInput {
 
 export interface AgentProcessOutput {
   replyText: string;
+  replyParts: string[];
+  optOut: boolean;
+  needsHumanTakeover: boolean;
   isPropertyUpdate: boolean;
   propertyStatus: string;
   newValue?: string | null;
@@ -39,6 +43,7 @@ export interface AgentProcessOutput {
   rollingSummary: string;
   collectedData?: {
     propertyStatus?: string | null;
+    priceConfirmed?: boolean | null;
     newValue?: string | null;
     newCondo?: string | null;
     newIptu?: string | null;
@@ -144,8 +149,17 @@ export function formatReceptionNotification(params: {
     valoresText += `🤝 *Indicação / Oportunidade:* *${params.referral}*\n`;
   }
 
+  const isHumanTakeover = Boolean(params.observacoes?.includes("consultor"));
+  const header = isHumanTakeover
+    ? `🚨 *ATENÇÃO RECEPÇÃO: PROPRIETÁRIO SOLICITA ATENDIMENTO HUMANO* 👤\n`
+    : `📋 *AVISO DE ATUALIZAÇÃO DE IMÓVEL (AGENTE IA)* 🏢\n`;
+
+  const footerAction = isHumanTakeover
+    ? `⚠️ *Ação para a Recepção:* O proprietário fez perguntas ou solicitações que exigem um consultor humano. A Camila AI foi pausada para este contato. Por favor, acione o corretor responsável para retornar.`
+    : `⚠️ *Ação para a Recepção:* Por favor, acesse o Imoview e atualize o cadastro deste imóvel conforme as novas condições informadas pelo proprietário.`;
+
   return (
-    `📋 *AVISO DE ATUALIZAÇÃO DE IMÓVEL (AGENTE IA)* 🏢\n` +
+    header +
     `-----------------------------------------\n` +
     `🏠 *Código do Imóvel:* *${params.codigoImovel || "Não informado"}*\n` +
     `👤 *Proprietário:* ${params.proprietarioNome || "Não informado"}\n` +
@@ -153,7 +167,7 @@ export function formatReceptionNotification(params: {
     `📊 *Status do Imóvel:* *${statusFormatado}*\n` +
     (valoresText ? `${valoresText}\n` : "") +
     (params.observacoes ? `📝 *Observações / Resumo:* ${params.observacoes}\n\n` : "") +
-    `⚠️ *Ação para a Recepção:* Por favor, acesse o Imoview e atualize o cadastro deste imóvel conforme as novas condições informadas pelo proprietário.`
+    footerAction
   );
 }
 
@@ -332,11 +346,13 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
   }
 
   // Mesclagem CUMULATIVA do estado extraído (para nunca perder valor, horários ou indicações já informados)
+  // Status só é registrado quando o proprietário de fato informou (nunca assumir DISPONIVEL por padrão)
   const mergedCollectedData = {
     propertyStatus:
       parsed.propertyStatus && parsed.propertyStatus !== "INALTERADO"
         ? parsed.propertyStatus
-        : initialCollectedData.propertyStatus || "DISPONIVEL",
+        : initialCollectedData.propertyStatus || null,
+    priceConfirmed: Boolean(parsed.priceConfirmed || parsed.newValue || initialCollectedData.priceConfirmed),
     newValue: parsed.newValue || initialCollectedData.newValue || null,
     newCondo: parsed.newCondo || initialCollectedData.newCondo || null,
     newIptu: parsed.newIptu || initialCollectedData.newIptu || null,
@@ -344,7 +360,69 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     referral: parsed.referral || initialCollectedData.referral || null,
   };
 
-  const replyText = parsed.replyToOwner || "Obrigado pelo seu retorno! Já estamos registrando tudo por aqui.";
+  // Balões de mensagem (cadência humana): aceita replyParts (novo) ou replyToOwner (prompts customizados antigos)
+  let rawParts: string[] = Array.isArray(parsed.replyParts)
+    ? parsed.replyParts.map((p: any) => String(p || "").trim()).filter(Boolean).slice(0, 3)
+    : [];
+  if (rawParts.length === 0 && parsed.replyToOwner) {
+    rawParts = [String(parsed.replyToOwner).trim()];
+  }
+  if (rawParts.length === 0) {
+    rawParts = ["Obrigada pelo retorno! Vou passar as informações pra equipe."];
+  }
+
+  // Sanitização determinística dos balões:
+  // 1. Remove prefixos como "Camila:", "Proprietário:"
+  // 2. Remove balões que são eco exato da fala do usuário
+  // 3. Remove frases passivas proibidas ("estamos à disposição", etc.)
+  const userTextNorm = input.messageText.toLowerCase().trim();
+  const forbiddenPassiveRegex = /\b(caso mude de ideia|qualquer dúvida estamos à disposição|se precisar estamos por aqui|estamos à disposição|qualquer coisa estamos por aqui|se mudar de ideia é só chamar)\b/gi;
+
+  let sanitizedParts = rawParts
+    .map((p) =>
+      p
+        .replace(/^(camila|propriet[aá]rio|cliente|user|assistente):\s*/i, "")
+        .replace(forbiddenPassiveRegex, "")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+    )
+    .filter((p) => {
+      if (!p) return false;
+      const pNorm = p.toLowerCase().trim();
+      // Não pode ser eco idêntico do que o usuário acabou de falar
+      if (pNorm === userTextNorm && pNorm.length < 60) return false;
+      return true;
+    });
+
+  if (sanitizedParts.length === 0) {
+    sanitizedParts = ["Obrigada pelo retorno! Vou passar as informações pra equipe."];
+  }
+
+  const replyParts = sanitizedParts;
+  const replyText = replyParts.join("\n\n");
+
+  // Detecção determinística de Opt-Out (pedido para não receber mensagens / número errado)
+  const optOutTriggers = [
+    "não me mande", "nao me mande", "não me envie", "nao me envie",
+    "não mandem", "nao mandem", "pare de mandar", "não quero receber",
+    "nao quero receber", "descadastrar", "remover meu", "tirar meu",
+    "tire meu", "número errado", "numero errado", "não sou o proprietário",
+    "nao sou o proprietario", "não é esse número", "nao e esse numero",
+    "não tenho interesse", "nao tenho interesse", "favor não entrar em contato",
+    "favor nao entrar em contato"
+  ];
+  const optOut = Boolean(parsed.optOut || optOutTriggers.some((t) => userTextNorm.includes(t)));
+
+  // Detecção determinística de Transbordo Humano (perguntas que só um consultor sabe)
+  const takeoverTriggers = [
+    "quantas visitas", "quantos acessos", "teve visita", "teve proposta",
+    "tem proposta", "alguma proposta", "falar com corretor", "falar com uma pessoa",
+    "falar com alguém", "falar com alguem", "falar com humano", "atendente",
+    "comissão", "comissao", "exclusividade", "rescindir", "cancelar contrato",
+    "cancelar anúncio", "cancelar anuncio"
+  ];
+  const needsHumanTakeover = Boolean(parsed.needsHumanTakeover || takeoverTriggers.some((t) => userTextNorm.includes(t)));
+
   const isPropertyUpdate = Boolean(parsed.isPropertyUpdate || mergedCollectedData.newValue || mergedCollectedData.newCondo);
   const propertyStatus = mergedCollectedData.propertyStatus || "INALTERADO";
   const newValue = mergedCollectedData.newValue;
@@ -362,19 +440,17 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     enrichedNotes = `${enrichedNotes ? `${enrichedNotes} | ` : ""}Indicação: ${referral}`;
   }
   
-  // Regra de Ouro: Qualquer alteração de dados cadastrais, valor, condomínio, visitas ou indicação dispara aviso para a recepção!
-  const hasValueOrStatusChange = Boolean(
-    isPropertyUpdate ||
-    newValue ||
-    newCondo ||
-    visitingHours ||
-    referral ||
-    propertyStatus === "DISPONIVEL" ||
-    propertyStatus === "VENDIDO_OUTRA" ||
-    propertyStatus === "VENDIDO_RHEMA" ||
-    propertyStatus === "DESISTIU"
+  if (needsHumanTakeover && !enrichedNotes.toLowerCase().includes("consultor")) {
+    enrichedNotes = `${enrichedNotes ? `${enrichedNotes} | ` : ""}⚠️ Proprietário precisa de atendimento de um consultor humano.`;
+  }
+
+  // Aviso para a recepção SOMENTE quando algo mudou em relação ao estado anterior
+  // (antes disparava a cada mensagem, gerando avisos duplicados no WhatsApp da recepção)
+  const trackedFields = ["propertyStatus", "priceConfirmed", "newValue", "newCondo", "newIptu", "visitingHours", "referral"] as const;
+  const hasNewInformation = trackedFields.some(
+    (field) => (mergedCollectedData as any)[field] !== ((initialCollectedData as any)[field] ?? (field === "priceConfirmed" ? false : null))
   );
-  const needsReceptionAlert = Boolean(parsed.needsReceptionAlert || hasValueOrStatusChange);
+  const needsReceptionAlert = Boolean(hasNewInformation || needsHumanTakeover);
   const updatedRollingSummary = parsed.conversationSummaryUpdate || rollingSummary;
 
   // Montar aviso da recepção se aplicável
@@ -397,6 +473,9 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
 
   let receptionNotified = false;
 
+  // Opt-out e transbordo humano pausam a Camila para este contato
+  const conversationStatus = optOut ? "OPTED_OUT" : needsHumanTakeover ? "HUMAN_TAKEOVER" : "ACTIVE";
+
   // Se não for modo de simulação, persistir dados no banco de dados
   if (!input.simulateOnly) {
     try {
@@ -409,13 +488,14 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
           phone: cleanPhone,
           contactName: input.contactName || cachedContext?.nome,
           codigoImovel,
-          status: "ACTIVE",
+          status: conversationStatus,
           summary: updatedRollingSummary,
           lastExtractedData: mergedCollectedData,
           receptionNotified: false,
         },
         update: {
           sessionId: input.sessionId || undefined,
+          ...(conversationStatus !== "ACTIVE" ? { status: conversationStatus } : {}),
           summary: updatedRollingSummary,
           lastExtractedData: mergedCollectedData,
           codigoImovel: codigoImovel || undefined,
@@ -507,6 +587,9 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
 
   return {
     replyText,
+    replyParts,
+    optOut,
+    needsHumanTakeover,
     isPropertyUpdate,
     propertyStatus,
     newValue,
