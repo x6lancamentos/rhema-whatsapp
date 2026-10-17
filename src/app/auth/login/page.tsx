@@ -21,8 +21,8 @@ import Link from 'next/link';
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const formSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(1, "Password is required"),
+  email: z.string().min(3, "Digite seu WhatsApp (DDD + Número) ou E-mail"),
+  password: z.string().min(1, "A senha é obrigatória"),
 });
 
 function LoginForm() {
@@ -51,13 +51,13 @@ function LoginForm() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
+        setError("WhatsApp/E-mail ou senha incorretos.");
       } else {
         window.location.href = callbackUrl;
         router.refresh();
       }
     } catch (err) {
-      setError("An unexpected error occurred");
+      setError("Ocorreu um erro ao realizar login.");
     } finally {
       setLoading(false);
     }
@@ -97,10 +97,10 @@ function LoginForm() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-foreground/80">Email</FormLabel>
+                    <FormLabel className="text-foreground/80">WhatsApp (DDD + Número) ou E-mail</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="name@example.com"
+                        placeholder="Ex: 13991673717 ou email"
                         className="h-12 px-4 rounded-xl bg-background/50 border-white/20 dark:border-white/10 focus-visible:ring-primary/50 transition-all font-medium"
                         {...field}
                       />

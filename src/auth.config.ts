@@ -17,10 +17,17 @@ export const authConfig = {
             }
             return true;
         },
-        async jwt({ token, user }) {
+        async jwt({ token, user, trigger, session: updateSession }) {
             if (user) {
                 token.id = user.id;
                 token.role = (user as any).role;
+                token.mustChangePassword = (user as any).mustChangePassword;
+                token.phone = (user as any).phone;
+            }
+            if (trigger === "update" && updateSession) {
+                if (updateSession.mustChangePassword !== undefined) {
+                    token.mustChangePassword = updateSession.mustChangePassword;
+                }
             }
             return token;
         },
@@ -28,6 +35,8 @@ export const authConfig = {
             if (token && session.user) {
                 session.user.id = token.id as string;
                 (session.user as any).role = token.role;
+                (session.user as any).mustChangePassword = token.mustChangePassword;
+                (session.user as any).phone = token.phone;
             }
             return session;
         }

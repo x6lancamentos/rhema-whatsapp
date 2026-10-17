@@ -5,6 +5,7 @@ import { SidebarProvider } from "@/components/dashboard/sidebar-context";
 import { SidebarShell } from "@/components/dashboard/sidebar-shell";
 import { UpdateChecker } from "@/components/dashboard/update-checker";
 import { RegistrationWarning } from "@/components/dashboard/registration-warning";
+import { FirstLoginPasswordModal } from "@/components/dashboard/first-login-password-modal";
 import { prisma } from "@/lib/prisma";
 import { Toaster } from "sonner";
 import pkg from "../../../package.json";
@@ -29,6 +30,7 @@ export default async function DashboardLayout({
                     role={session?.user?.role as string}
                     registrationEnabled={registrationEnabled}
                 />
+                <FirstLoginPasswordModal />
                 <div className="flex h-screen bg-background relative overflow-hidden" suppressHydrationWarning={true}>
                     {/* Subtle ambient background */}
                     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" suppressHydrationWarning={true}>

@@ -42,11 +42,13 @@ model User {
   id                    String   @id @default(cuid())
   name                  String?
   email                 String   @unique
+  phone                 String?  @unique // Telefone WhatsApp / Login
   password              String
   role                  Role     @default(CORRETOR)
   apiKey                String?  @unique // API Key for authentication
   imoviewCorretorCodigo String?
   imoviewCorretorNome   String?
+  mustChangePassword    Boolean  @default(false)
   permissionsOverrides  Json?    // Custom granular overrides { [permissionKey]: boolean }
   isActive              Boolean  @default(true)
   createdAt             DateTime @default(now())
