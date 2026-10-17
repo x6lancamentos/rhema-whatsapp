@@ -150,6 +150,7 @@ export function buildOwnerContextPrompt(context: OwnerPromptContext) {
 
   const infoImovel = [
     context.codigoImovel ? `- Código do Imóvel no Imoview: ${context.codigoImovel}` : "",
+    context.codigoImovel ? `- Link Oficial do Imóvel: https://www.rhemaimoveis.com.br/imovel/detalhes/${context.codigoImovel}` : "",
     context.tituloImovel ? `- Descrição/Título: ${context.tituloImovel}` : "",
     context.tipoImovel ? `- Tipo: ${context.tipoImovel}` : "",
     context.bairro ? `- Bairro: ${context.bairro}` : "",

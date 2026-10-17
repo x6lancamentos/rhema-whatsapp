@@ -20,6 +20,7 @@ Ainda está à procura de opções ou já encontrou o imóvel ideal?`,
     content: `Olá {{primeiro_nome}}, seja muito bem-vindo(a) à Rhema Imóveis! 🏡
 
 Recebemos seu interesse no imóvel cód. {{codigo_imovel}} ({{tipo_imovel}} em {{bairro}}).
+🔗 {{link_imovel}}
 
 Meu nome é {{corretor}} e estou à sua disposição. Gostaria de receber mais fotos e informações ou prefere agendar uma visita presencial?`,
   },
@@ -32,6 +33,7 @@ Meu nome é {{corretor}} e estou à sua disposição. Gostaria de receber mais f
 💰 *Valor:* {{valor}}
 🛏 *Quartos:* {{quartos}} | 🚗 *Vagas:* {{vagas}}
 🔖 *Código de Referência:* {{codigo_imovel}}
+🔗 *Link:* {{link_imovel}}
 
 Gostaria de ver o book de fotos completo ou o vídeo do imóvel?`,
   },
@@ -54,6 +56,7 @@ Caso precise de algum ajuste de horário ou rota, é só nos responder por aqui!
     name: "Confirmação de Disponibilidade & Valor (Proprietário)",
     category: "Proprietários",
     content: `{Olá|Oi} {{nome_proprietario}}, tudo bem? Aqui é da Rhema Imóveis a respeito do seu imóvel cód. {{codigo_imovel}} ({{tipo_imovel}} em {{bairro}}).
+🔗 {{link_imovel}}
 
 Estamos atualizando nossa base ativa para direcionar novos compradores e locatários qualificados.
 
@@ -70,6 +73,7 @@ Podemos confirmar estas informações?`,
     content: `{Olá|Oi} {{nome_proprietario}}, tudo bem? Aqui é da Rhema Imóveis.
 
 Estamos revisando o cadastro do seu imóvel cód. {{codigo_imovel}} ({{tipo_imovel}} no {{bairro}}).
+🔗 {{link_imovel}}
 
 Para mantermos as informações 100% corretas para apresentação a clientes e propostas, você poderia nos confirmar os valores atuais de:
 🏢 *Condomínio:* {{condominio}}

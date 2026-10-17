@@ -45,6 +45,7 @@ import {
   SlidersHorizontal,
   MapPin,
   Tag,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SessionGuard } from "@/components/dashboard/session-guard";
@@ -97,6 +98,7 @@ interface ImoviewProperty {
   corretorId?: string;
   situacao?: string;
   isRhemaProprio?: boolean;
+  linkImovel?: string;
 }
 
 interface MessageTemplate {
@@ -826,6 +828,7 @@ export default function ImoviewIntegrationPage() {
             vagas: l.vagas || "",
             atendimentoId: l.atendimentoId,
             codigo_atendimento: l.atendimentoId,
+            link_imovel: l.codigoImovel ? `https://www.rhemaimoveis.com.br/imovel/detalhes/${l.codigoImovel}` : "",
           },
         };
       });
@@ -876,6 +879,7 @@ export default function ImoviewIntegrationPage() {
             corretor: p.corretorNome || "Rhema Imóveis",
             corretor_captador: p.corretorNome || "Rhema Imóveis",
             situacao: p.situacao || "Disponível",
+            link_imovel: `https://www.rhemaimoveis.com.br/imovel/detalhes/${p.codigo}`,
           },
         };
       });
@@ -1332,7 +1336,16 @@ export default function ImoviewIntegrationPage() {
                               <div className="font-medium text-foreground">
                                 {lead.tipoImovel || "Imóvel"}{" "}
                                 {lead.codigoImovel && (
-                                  <span className="font-mono text-[10px] text-primary">#{lead.codigoImovel}</span>
+                                  <a
+                                    href={`https://www.rhemaimoveis.com.br/imovel/detalhes/${lead.codigoImovel}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-mono text-[10px] text-primary hover:underline inline-flex items-center gap-0.5"
+                                    title="Abrir imóvel no site da Rhema"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    #{lead.codigoImovel} <ExternalLink className="h-2.5 w-2.5" />
+                                  </a>
                                 )}
                               </div>
                               <div className="text-[10px] text-muted-foreground">
@@ -1954,7 +1967,16 @@ export default function ImoviewIntegrationPage() {
                               <div className="flex items-center gap-2">
                                 <div>
                                   <div className="font-semibold text-foreground text-xs flex items-center gap-1.5">
-                                    <span className="font-mono text-primary font-bold">#{prop.codigo}</span>
+                                    <a
+                                      href={`https://www.rhemaimoveis.com.br/imovel/detalhes/${prop.codigo}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-mono text-primary font-bold hover:underline inline-flex items-center gap-0.5"
+                                      title="Abrir no site da Rhema"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      #{prop.codigo} <ExternalLink className="h-2.5 w-2.5" />
+                                    </a>
                                     <span>{prop.tipo}</span>
                                     {prop.corretorNome?.includes("Rhema") && (
                                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-emerald-500/40 text-emerald-600 bg-emerald-500/10 font-bold">
@@ -2071,23 +2093,34 @@ export default function ImoviewIntegrationPage() {
                               </div>
                             </td>
                             <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                                title="Editar dados do proprietário"
-                                onClick={() =>
-                                  setEditContactModal({
-                                    open: true,
-                                    type: "property",
-                                    id: prop.codigo,
-                                    name: prop.proprietarioNome,
-                                    phone: prop.proprietarioTelefone,
-                                  })
-                                }
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
+                              <div className="flex items-center justify-center gap-1">
+                                <a
+                                  href={`https://www.rhemaimoveis.com.br/imovel/detalhes/${prop.codigo}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+                                  title="Abrir no site da Rhema"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                  title="Editar dados do proprietário"
+                                  onClick={() =>
+                                    setEditContactModal({
+                                      open: true,
+                                      type: "property",
+                                      id: prop.codigo,
+                                      name: prop.proprietarioNome,
+                                      phone: prop.proprietarioTelefone,
+                                    })
+                                  }
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         );

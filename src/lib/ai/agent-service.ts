@@ -162,6 +162,7 @@ export function formatReceptionNotification(params: {
     header +
     `-----------------------------------------\n` +
     `🏠 *Código do Imóvel:* *${params.codigoImovel || "Não informado"}*\n` +
+    (params.codigoImovel ? `🔗 *Link do Imóvel:* https://www.rhemaimoveis.com.br/imovel/detalhes/${params.codigoImovel}\n` : "") +
     `👤 *Proprietário:* ${params.proprietarioNome || "Não informado"}\n` +
     `📱 *WhatsApp:* ${params.proprietarioTelefone}\n\n` +
     `📊 *Status do Imóvel:* *${statusFormatado}*\n` +

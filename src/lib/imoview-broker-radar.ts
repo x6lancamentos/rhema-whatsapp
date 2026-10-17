@@ -208,7 +208,7 @@ export async function fetchRecentStockProperties(options: {
             captadorNome,
             captadorCodigo,
             fotoPrincipal: item.urlfotoprincipal || item.urlfotoprincipalm || undefined,
-            linkImovel: `https://www.rhemaimoveis.com.br/imovel/${item.codigo}`,
+            linkImovel: `https://www.rhemaimoveis.com.br/imovel/detalhes/${item.codigo}`,
             situacao: item.situacao || "Disponível",
           });
 

@@ -52,6 +52,11 @@ export interface ImoviewProperty {
   corretorId?: string;
   situacao?: string;
   isRhemaProprio?: boolean;
+  linkImovel?: string;
+}
+
+export function getRhemaPropertyUrl(codigo: string | number): string {
+  return `https://www.rhemaimoveis.com.br/imovel/detalhes/${codigo}`;
 }
 
 export async function getImoviewConfig() {
@@ -628,6 +633,7 @@ export async function fetchImoviewProperties(options: {
               situacao: imovel?.situacao || undefined,
               corretorNome: isRhemaFilter ? "Rhema (Camila)" : undefined,
               isRhemaProprio: false,
+              linkImovel: getRhemaPropertyUrl(codigoFinal),
             });
 
           }
@@ -816,6 +822,7 @@ export async function fetchImoviewProperties(options: {
               corretorNome: brokerNome || (item.captadores?.[0]?.nome || undefined),
               situacao: item.situacao || undefined,
               isRhemaProprio: false,
+              linkImovel: getRhemaPropertyUrl(item.codigo),
             });
 
             if (allProperties.length >= maxLimit) break;

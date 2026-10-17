@@ -117,6 +117,7 @@ export function ImoviewContextPanel({
       context.quartos ? `🛏️ ${context.quartos} quarto(s)` : null,
       context.vagas ? `🚗 ${context.vagas} vaga(s)` : null,
       context.corretorNome ? `👤 Corretor: ${context.corretorNome}` : null,
+      context.codigoImovel ? `🔗 Link: https://www.rhemaimoveis.com.br/imovel/detalhes/${context.codigoImovel}` : null,
     ].filter(Boolean);
 
     navigator.clipboard.writeText(lines.join("\n"));
@@ -133,7 +134,8 @@ export function ImoviewContextPanel({
       (context.valorIptu ? `🏛️ *IPTU:* ${context.valorIptu}\n` : "") +
       (context.quartos ? `🛏️ ${context.quartos} quarto(s)  ` : "") +
       (context.vagas ? `🚗 ${context.vagas} vaga(s)\n` : "\n") +
-      `\nFico à disposição para agendarmos uma visita!`;
+      (context.codigoImovel ? `🔗 *Link do Imóvel:* https://www.rhemaimoveis.com.br/imovel/detalhes/${context.codigoImovel}\n\n` : "\n") +
+      `Fico à disposição para agendarmos uma visita!`;
 
     onInsertMessage(text);
     toast.success("Ficha do imóvel inserida no campo de mensagem!");
@@ -299,6 +301,16 @@ export function ImoviewContextPanel({
                     {context.bairro || "Bairro não informado"}{context.cidade ? `, ${context.cidade}` : ""}
                   </span>
                 </div>
+                {context.codigoImovel && (
+                  <a
+                    href={`https://www.rhemaimoveis.com.br/imovel/detalhes/${context.codigoImovel}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-500 hover:underline pt-1"
+                  >
+                    Ver imóvel no site da Rhema <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
               </div>
 
               {/* Price & Highlighted Values (Condominio + IPTU) */}
