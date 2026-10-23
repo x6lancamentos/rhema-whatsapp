@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { sanitizePhoneNumber } from "./spintax";
+import { sanitizePhoneNumber, normalizeVarKey } from "./spintax";
 
 export interface ParsedContactRow {
   originalPhone: string;
@@ -135,16 +135,32 @@ export async function parseSpreadsheet(file: File): Promise<SpreadsheetParseResu
 
     const name = nameColumn ? String(row[nameColumn] || "").trim() : "";
 
-    // Build custom variables dictionary (all other columns)
+    // Build custom variables dictionary (all other columns with robust aliases)
     const variables: Record<string, any> = {};
     for (const col of columns) {
       const val = row[col];
       if (val !== undefined && val !== null && String(val).trim() !== "") {
-        variables[col] = String(val).trim();
+        const strVal = String(val).trim();
+        variables[col] = strVal;
+        const norm = normalizeVarKey(col);
+        if (norm) {
+          variables[norm] = strVal;
+          variables[norm.replace(/_/g, "")] = strVal;
+
+          const stripped = norm.replace(/_(de|do|da|dos|das)_/g, "_");
+          if (stripped !== norm) {
+            variables[stripped] = strVal;
+            variables[stripped.replace(/_/g, "")] = strVal;
+          }
+        }
       }
     }
 
-    if (name) variables["nome"] = name;
+    if (name) {
+      variables["nome"] = name;
+      variables["nome_proprietario"] = name;
+      variables["proprietario"] = name;
+    }
     variables["telefone"] = sanitized.phone;
 
     validContacts.push({

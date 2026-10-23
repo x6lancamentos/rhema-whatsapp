@@ -19,8 +19,10 @@ import {
   Info,
   X,
   Building2,
+  Sparkles,
 } from "lucide-react";
 import { ImoviewContextPanel } from "./imoview-context-panel";
+import { InteractiveMessageDialog } from "./interactive-message-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
@@ -286,6 +288,9 @@ export function ChatWindow({ sessionId, jid, name, onBack, onSelectChat }: ChatW
   // Imoview Context Panel state
   const [showImoviewPanel, setShowImoviewPanel] = useState(false);
   const [hasImoviewContext, setHasImoviewContext] = useState(false);
+
+  // Interactive Message Dialog state
+  const [interactiveDialogOpen, setInteractiveDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!jid) return;
@@ -866,6 +871,18 @@ export function ChatWindow({ sessionId, jid, name, onBack, onSelectChat }: ChatW
                         </div>
                       )}
 
+                    {/* Interactive Response Badge */}
+                    {(msg.content?.includes("[Interactive Response]") || msg.content?.includes("[Button Response]") || msg.content?.includes("[List Response]") || msg.content?.includes("[Button Reply]")) && (
+                      <div className="mb-1">
+                        <span className={cn(
+                          "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                          msg.fromMe ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                        )}>
+                          🔘 Resposta Interativa
+                        </span>
+                      </div>
+                    )}
+
                     {/* Text Content (Portuguese friendly wrap: [overflow-wrap:anywhere] and break-words) */}
                     {msg.content && msg.type !== "LOCATION" && msg.type !== "CONTACT" && msg.type !== "AUDIO" && (
                       <div className="flex items-end gap-2">
@@ -975,9 +992,28 @@ export function ChatWindow({ sessionId, jid, name, onBack, onSelectChat }: ChatW
                 >
                   <FileText className="h-3.5 w-3.5 text-emerald-500" /> Documento
                 </Button>
+                <div className="my-1 border-t border-border/30" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start gap-2 h-8 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-500 hover:bg-amber-500/10 font-medium"
+                  onClick={() => setInteractiveDialogOpen(true)}
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Mensagem Interativa (Botões)
+                </Button>
               </div>
             </PopoverContent>
           </Popover>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full shrink-0 text-amber-500/80 hover:text-amber-500 hover:bg-amber-500/10"
+            title="Criar Mensagem Interativa (Botões / Links / Lista)"
+            onClick={() => setInteractiveDialogOpen(true)}
+          >
+            <Sparkles className="h-4.5 w-4.5" />
+          </Button>
 
           <div className="flex-1">
             {/* Reply preview bar */}
@@ -1039,6 +1075,15 @@ export function ChatWindow({ sessionId, jid, name, onBack, onSelectChat }: ChatW
       isOpen={showImoviewPanel}
       onClose={() => setShowImoviewPanel(false)}
       onInsertMessage={(text) => setInput((prev) => (prev ? prev + "\n" + text : text))}
+    />
+
+    {/* Interactive Message & Test Trigger Dialog */}
+    <InteractiveMessageDialog
+      open={interactiveDialogOpen}
+      onOpenChange={setInteractiveDialogOpen}
+      sessionId={sessionId}
+      jid={jid}
+      recipientName={displayName}
     />
   </div>
 </div>

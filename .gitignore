@@ -52,3 +52,5 @@ server.log
 /uploads/
 start-local.bat
 start-local.ps1
+data/exports/
+data/rhema-contacts.json

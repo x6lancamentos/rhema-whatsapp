@@ -14,8 +14,9 @@ import { toast } from "sonner";
 import { useSession } from "next-auth/react"; // Use client session for Role check UI-side
 
 export default function NotificationAdminPage() {
-    // Note: Server-side protection is also needed.
-    // For now assuming Layout or Middleware handles role check, or API sends 403.
+    const { data: authSession, status } = useSession();
+    // @ts-ignore
+    const isSuperAdmin = authSession?.user?.role === "SUPERADMIN";
 
     const [title, setTitle] = useState("");
     const [message, setMessage] = useState("");
@@ -24,6 +25,19 @@ export default function NotificationAdminPage() {
     const [targetUserId, setTargetUserId] = useState("");
     const [href, setHref] = useState("");
     const [loading, setLoading] = useState(false);
+
+    if (status === "loading") {
+        return <div className="p-8 text-center text-sm text-muted-foreground">Carregando...</div>;
+    }
+
+    if (!isSuperAdmin) {
+        return (
+            <div className="p-8 text-center space-y-3">
+                <h2 className="text-xl font-bold text-destructive">Acesso Restrito</h2>
+                <p className="text-sm text-muted-foreground">Esta área de notificações do sistema é restrita exclusivamente ao Super Administrador.</p>
+            </div>
+        );
+    }
 
     const handleSend = async () => {
         if (!title || !message) return toast.error("Title and Message are required");

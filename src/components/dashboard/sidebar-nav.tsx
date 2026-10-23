@@ -72,6 +72,7 @@ const navGroups: NavGroup[] = [
         labelKey: "nav.group.messaging",
         items: [
             { href: "/dashboard/chat", label: "Chat", labelKey: "nav.chat", icon: MessageSquare },
+            { href: "/dashboard/interactive", label: "Botões Interativos", labelKey: "nav.interactive" as any, icon: Sparkles },
             { href: "/dashboard/broadcast", label: "Broadcast", labelKey: "nav.broadcast", icon: Megaphone },
             { href: "/dashboard/templates", label: "Modelos", labelKey: "nav.templates", icon: FileText },
             { href: "/dashboard/imoview", label: "Imoview CRM", labelKey: "nav.imoview", icon: Building2 },

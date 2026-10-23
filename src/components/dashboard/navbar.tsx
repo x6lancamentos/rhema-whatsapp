@@ -70,6 +70,18 @@ export function Navbar({ appName }: NavbarProps) {
             });
 
             socketInstance.on("notification:new", (notification: Notification) => {
+                // Restrict WA-AKG and SYSTEM notifications exclusively to SUPERADMIN
+                const isSystemOrAkg = notification.type === "SYSTEM" || 
+                    notification.title?.includes("WA-AKG") || 
+                    notification.message?.includes("WA-AKG");
+                
+                // @ts-ignore
+                const isSuperAdmin = session?.user?.role === "SUPERADMIN";
+
+                if (isSystemOrAkg && !isSuperAdmin) {
+                    return;
+                }
+
                 console.log("New notification received:", notification);
 
                 // Add to notifications list

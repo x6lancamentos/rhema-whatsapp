@@ -442,8 +442,63 @@ async function processAndSaveMessage(
     let text = "";
     let messageType = "TEXT";
 
+    // Check for interactive message (native flow / viewOnce wrapper)
+    const rawMsg = msg.message as any;
+    const interactiveMsg = messageContent?.interactiveMessage || 
+        rawMsg?.viewOnceMessage?.message?.interactiveMessage || 
+        rawMsg?.viewOnceMessageV2?.message?.interactiveMessage;
+
     // Extract content based on message type
-    if (messageContent?.conversation) {
+    if (interactiveMsg) {
+        messageType = "TEXT";
+        const title = interactiveMsg.header?.title ? `*${interactiveMsg.header.title}*\n` : "";
+        const body = interactiveMsg.body?.text || "";
+        const footer = interactiveMsg.footer?.text ? `\n_${interactiveMsg.footer.text}_` : "";
+
+        let buttonList = "";
+        const rawBtns = interactiveMsg.nativeFlowMessage?.buttons || [];
+        if (Array.isArray(rawBtns) && rawBtns.length > 0) {
+            const btnTitles = rawBtns.map((b: any) => {
+                try {
+                    const params = typeof b.buttonParamsJson === 'string' 
+                        ? JSON.parse(b.buttonParamsJson) 
+                        : (b.buttonParamsJson || {});
+                    return `[🔘 ${params.display_text || b.name || "Button"}]`;
+                } catch {
+                    return `[🔘 ${b.name || "Button"}]`;
+                }
+            });
+            buttonList = `\n\n${btnTitles.join("  ")}`;
+        }
+
+        text = `${title}${body}${footer}${buttonList}`.trim() || "[Interactive Message]";
+    } else if (messageContent?.interactiveResponseMessage) {
+        messageType = "TEXT";
+        const rm = messageContent.interactiveResponseMessage;
+        const nativeParams = rm.nativeFlowResponseMessage?.paramsJson;
+        let selectedId = "";
+        try {
+            if (nativeParams) {
+                const parsed = JSON.parse(nativeParams);
+                selectedId = parsed.id || parsed.selected_id || "";
+            }
+        } catch {}
+        const bodyText = rm.body?.text || "";
+        const choice = bodyText || selectedId;
+        text = choice ? `🔘 [Interactive Response] ${choice}` : "🔘 [Interactive Response]";
+    } else if (messageContent?.buttonsResponseMessage) {
+        messageType = "TEXT";
+        const bm = messageContent.buttonsResponseMessage;
+        text = `🔘 [Button Response] ${bm.selectedDisplayText || bm.selectedButtonId || ""}`;
+    } else if (messageContent?.listResponseMessage) {
+        messageType = "TEXT";
+        const lm = messageContent.listResponseMessage;
+        text = `📋 [List Response] ${lm.title || lm.singleSelectReply?.selectedRowId || ""}`;
+    } else if (messageContent?.templateButtonReplyMessage) {
+        messageType = "TEXT";
+        const tm = messageContent.templateButtonReplyMessage;
+        text = `🔘 [Button Reply] ${tm.selectedDisplayText || tm.selectedId || ""}`;
+    } else if (messageContent?.conversation) {
         text = messageContent.conversation;
     } else if (messageContent?.extendedTextMessage?.text) {
         text = messageContent.extendedTextMessage.text;

@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
+import { useSession } from "next-auth/react";
 
 export function UpdateChecker() {
+    const { data: session } = useSession();
+    // @ts-ignore
+    const isSuperAdmin = session?.user?.role === "SUPERADMIN";
+
     useEffect(() => {
+        if (!isSuperAdmin) return;
+
         const checkUpdates = async () => {
             try {
                 // Determine if we should check. Maybe check localStorage to avoid spamming every reload?

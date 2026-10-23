@@ -856,6 +856,62 @@ export default function BroadcastPage() {
     }
   };
 
+  // Download Sample Excel Model for Broadcast
+  const handleDownloadSampleSpreadsheet = () => {
+    try {
+      const sampleData = [
+        {
+          telefone: "13991234567",
+          nome_proprietario: "Carlos Eduardo Silva",
+          codigo_imovel: "AP0123",
+          tipo_imovel: "Apartamento",
+          bairro: "Gonzaga",
+          valor: "R$ 650.000,00",
+          condominio: "R$ 750,00",
+          iptu: "R$ 280,00",
+        },
+        {
+          telefone: "13988765432",
+          nome_proprietario: "Mariana Ferreira",
+          codigo_imovel: "CA0456",
+          tipo_imovel: "Casa Isolada",
+          bairro: "Boqueirão",
+          valor: "R$ 1.200.000,00",
+          condominio: "Isento",
+          iptu: "R$ 520,00",
+        },
+        {
+          telefone: "13997112233",
+          nome_proprietario: "Roberto Almeida",
+          codigo_imovel: "CB0789",
+          tipo_imovel: "Cobertura Duplex",
+          bairro: "Ponta da Praia",
+          valor: "R$ 1.850.000,00",
+          condominio: "R$ 1.450,00",
+          iptu: "R$ 780,00",
+        },
+      ];
+
+      const ws = XLSX.utils.json_to_sheet(sampleData);
+      ws["!cols"] = [
+        { wch: 16 },
+        { wch: 26 },
+        { wch: 16 },
+        { wch: 20 },
+        { wch: 18 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 14 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Modelo_Disparo_Rhema");
+      XLSX.writeFile(wb, "modelo_disparo_rhema.xlsx");
+      toast.success("Planilha de modelo baixada com sucesso!");
+    } catch (e: any) {
+      toast.error("Erro ao gerar planilha modelo");
+    }
+  };
+
   // 4. Label Selection Handler
   const handleSelectLabel = async (labelId: string) => {
     setSelectedLabelId(labelId);
@@ -986,13 +1042,22 @@ export default function BroadcastPage() {
       return;
     }
     const sampleContact = contacts[0] || {
-      name: "Brunno",
-      phone: "5519998765432",
-      variables: { nome: "Brunno", cidade: "Campinas", imovel: "Apartamento Jardins" },
+      name: "Carlos Eduardo Silva",
+      phone: "13991234567",
+      variables: {
+        nome: "Carlos Eduardo Silva",
+        nome_proprietario: "Carlos Eduardo Silva",
+        codigo_imovel: "AP0123",
+        tipo_imovel: "Apartamento",
+        bairro: "Gonzaga",
+        valor: "R$ 650.000,00",
+        condominio: "R$ 750,00",
+        iptu: "R$ 280,00",
+      },
     };
     const sample = processPersonalizedMessage(msg, {
       ...sampleContact.variables,
-      nome: sampleContact.name || "Brunno",
+      nome: sampleContact.name || "Carlos Eduardo Silva",
       telefone: sampleContact.phone,
     });
     setPreviewSample(sample);
@@ -1763,6 +1828,31 @@ export default function BroadcastPage() {
                     {/* Origem: Planilha Excel / CSV */}
                     {recipientSource === "file" && (
                       <div className="space-y-3">
+                        {/* Banner de Download do Modelo Oficial */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-primary/5 border border-primary/20 rounded-xl p-3 text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-primary/10 rounded-lg text-primary shrink-0">
+                              <FileSpreadsheet className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground text-xs">Planilha Modelo Rhema Imóveis</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Com colunas pré-configuradas: <span className="font-mono text-[10px] text-primary font-medium">telefone, nome_proprietario, codigo_imovel, valor...</span>
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5 text-xs font-semibold border-primary/30 hover:bg-primary/10 text-primary shrink-0 self-start sm:self-auto"
+                            onClick={handleDownloadSampleSpreadsheet}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Baixar Modelo (.xlsx)
+                          </Button>
+                        </div>
+
                         <label className="border-2 border-dashed border-primary/30 hover:border-primary/60 transition-colors rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer bg-primary/5 hover:bg-primary/10">
                           <UploadCloud className="h-8 w-8 text-primary mb-2" />
                           <span className="text-sm font-semibold text-foreground">
@@ -2070,24 +2160,62 @@ export default function BroadcastPage() {
                         </button>
                       </div>
 
-                      {/* Variáveis Dinâmicas da Base / Imoview / Planilha */}
+                      {/* Variáveis Padrão de Imóveis (Rhema) */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-border/30">
+                        <span className="text-[10px] text-muted-foreground font-semibold">Campos do Imóvel:</span>
+                        {[
+                          { label: "{{nome_proprietario}}", val: "{{nome_proprietario}}" },
+                          { label: "{{codigo_imovel}}", val: "{{codigo_imovel}}" },
+                          { label: "{{tipo_imovel}}", val: "{{tipo_imovel}}" },
+                          { label: "{{bairro}}", val: "{{bairro}}" },
+                          { label: "{{valor}}", val: "{{valor}}" },
+                          { label: "{{condominio}}", val: "{{condominio}}" },
+                          { label: "{{iptu}}", val: "{{iptu}}" },
+                        ].map((item) => (
+                          <button
+                            key={item.val}
+                            type="button"
+                            onClick={() => insertTextAtCursor(item.val)}
+                            className="px-2 py-0.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-md text-[11px] font-mono font-medium transition-colors"
+                          >
+                            + {item.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Outras Colunas Detectadas da Planilha */}
                       {detectedColumns && detectedColumns.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-border/30">
-                          <span className="text-[10px] text-muted-foreground font-semibold">Campos do Imóvel / Dados:</span>
+                          <span className="text-[10px] text-muted-foreground font-semibold">Outras Colunas da Planilha:</span>
                           {detectedColumns
-                            .filter((col) => !["nome", "primeiro_nome", "telefone", "saudacao"].includes(col.toLowerCase()))
+                            .filter((col) => {
+                              const norm = col.toLowerCase().replace(/[^a-z0-9]/g, "");
+                              return ![
+                                "nome",
+                                "primeironome",
+                                "telefone",
+                                "saudacao",
+                                "nomeproprietario",
+                                "proprietario",
+                                "codigoimovel",
+                                "codigo",
+                                "cod",
+                                "tipoimovel",
+                                "tipo",
+                                "bairro",
+                                "valor",
+                                "preco",
+                                "condominio",
+                                "iptu"
+                              ].includes(norm);
+                            })
                             .map((col) => {
-                              const isCondoOrIptu = ["condominio", "valor_condominio", "iptu", "valor_iptu", "nome_condominio"].includes(col.toLowerCase());
                               return (
                                 <button
                                   key={col}
                                   type="button"
                                   onClick={() => insertTextAtCursor(`{{${col}}}`)}
-                                  className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-medium transition-colors ${
-                                    isCondoOrIptu
-                                      ? "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
-                                      : "bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
-                                  }`}
+                                  className="px-2 py-0.5 rounded-md text-[11px] font-mono font-medium transition-colors bg-secondary/80 hover:bg-secondary text-secondary-foreground border border-border/40"
                                   title={`Inserir {{${col}}}`}
                                 >
                                   + {`{{${col}}}`}

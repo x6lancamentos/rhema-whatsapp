@@ -8,8 +8,23 @@ export async function GET(req: Request) {
     if (!session?.user?.id) return NextResponse.json({ status: false, message: "Unauthorized", error: "Unauthorized" }, { status: 401 });
 
     try {
+        const userRole = session.user.role;
+        const whereClause: any = { userId: session.user.id };
+
+        // Restrict WA-AKG and SYSTEM notifications exclusively to SUPERADMIN
+        if (userRole !== "SUPERADMIN") {
+            whereClause.NOT = [
+                { type: "SYSTEM" },
+                { title: { contains: "WA-AKG" } },
+                { title: { contains: "Update" } },
+                { title: { contains: "Versão" } },
+                { message: { contains: "WA-AKG" } },
+                { message: { contains: "GitHub" } },
+            ];
+        }
+
         const notifications = await prisma.notification.findMany({
-            where: { userId: session.user.id },
+            where: whereClause,
             orderBy: { createdAt: 'desc' },
             take: 50 // Limit to last 50
         });
@@ -24,7 +39,6 @@ export async function POST(req: Request) {
     if (!session?.user?.id) return NextResponse.json({ status: false, message: "Unauthorized", error: "Unauthorized" }, { status: 401 });
 
     // Only SUPERADMIN can send global notifications
-    // But system might trigger it too. For now check role.
     const user = await prisma.user.findUnique({ where: { id: session.user.id } });
     if (user?.role !== "SUPERADMIN") {
         return NextResponse.json({ status: false, message: "Forbidden: Only Superadmin can send notifications", error: "Forbidden" }, { status: 403 });
@@ -34,9 +48,13 @@ export async function POST(req: Request) {
         const { title, message, type, href, targetUserId, broadcast } = await req.json();
 
         if (broadcast) {
-            // Send to ALL users
-            const allUsers = await prisma.user.findMany({ select: { id: true } });
-            const notifications = allUsers.map((u: { id: string }) => ({
+            // Restrict SYSTEM/WA-AKG notifications strictly to SUPERADMIN recipients
+            const isSystemOrAkg = type === "SYSTEM" || title?.includes("WA-AKG") || message?.includes("WA-AKG");
+            const targetUsers = isSystemOrAkg
+                ? await prisma.user.findMany({ where: { role: "SUPERADMIN" }, select: { id: true } })
+                : await prisma.user.findMany({ select: { id: true } });
+
+            const notifications = targetUsers.map((u: { id: string }) => ({
                 userId: u.id,
                 title,
                 message,
@@ -47,10 +65,10 @@ export async function POST(req: Request) {
 
             await prisma.notification.createMany({ data: notifications });
 
-            // Emit Socket.IO event for each user
+            // Emit Socket.IO event for target users
             const io = (global as any).io;
             if (io) {
-                allUsers.forEach((u: { id: string }) => {
+                targetUsers.forEach((u: { id: string }) => {
                     io.to(`user:${u.id}`).emit('notification:new', {
                         userId: u.id,
                         title,
@@ -63,7 +81,7 @@ export async function POST(req: Request) {
                 });
             }
 
-            return NextResponse.json({ status: true, message: "Notifications broadcasted successfully", data: { count: allUsers.length } });
+            return NextResponse.json({ status: true, message: "Notifications broadcasted successfully", data: { count: targetUsers.length } });
         } else if (targetUserId) {
             // Send to specific user
             const notification = await prisma.notification.create({
