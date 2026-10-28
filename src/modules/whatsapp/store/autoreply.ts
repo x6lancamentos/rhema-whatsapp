@@ -1,8 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import type { WASocket } from "@whiskeysockets/baileys";
-import { normalizeMessageContent } from "@whiskeysockets/baileys";
+import { downloadMediaMessage, normalizeMessageContent } from "@whiskeysockets/baileys";
 import { logger } from "@/lib/logger";
 import { getAiAgentConfig, processOwnerMessage } from "@/lib/ai/agent-service";
+import { processRhemaVoiceOrText } from "@/lib/ai/rhema-voice-copilot";
+import {
+    resolveWhatsappRole,
+    isManagerCommandText,
+    isBrokerSelfServiceCommandText,
+    executeCommanderCommand,
+    executeBrokerSelfServiceCommand,
+} from "@/lib/ai/rhema-commander-service";
 
 // Helper for permission check (Deduplicate from command-handler if possible, but keep simple here)
 function canAutoReply(config: any, fromMe: boolean, senderJid: string): boolean {
@@ -241,7 +249,99 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
             if (!canAutoReply(config, fromMe, senderJid)) continue;
 
             const content = normalizeMessageContent(msg.message);
-            const text = content?.conversation || content?.extendedTextMessage?.text || ""; // Caption?
+            const text = content?.conversation || content?.extendedTextMessage?.text || "";
+            const hasAudio = Boolean(content?.audioMessage);
+
+            // ==========================================
+            // BLINDAGEM RBAC & DIRETORIA AGÊNTICA RHEMA OS (Gestor Comandante vs. Corretor vs. Cliente)
+            // ==========================================
+            if (!isGroup && !fromMe) {
+                try {
+                    const cleanSenderDigits = senderJid.replace(/@.*$/, "").replace(/\D/g, "");
+                    const trimmedText = (text || "").trim();
+
+                    // 1. Verifica se é comando de Gestor (HOMOLOGAR, DIAGNÓSTICO, STATUS OKR, PDI, CELEBRAR, #learn, APROVAR)
+                    // ou comando Self-Service de Corretor (#meuplacar, #meusleads)
+                    if (trimmedText && (isManagerCommandText(trimmedText) || isBrokerSelfServiceCommandText(trimmedText))) {
+                        const identity = await resolveWhatsappRole(cleanSenderDigits, msg.pushName || undefined);
+
+                        if (isManagerCommandText(trimmedText)) {
+                            const cmdResult = await executeCommanderCommand({
+                                comandoTexto: trimmedText,
+                                role: identity.role,
+                                remetenteNome: identity.nome,
+                            });
+                            await sock.sendMessage(remoteJid, { text: cmdResult.respostaWhatsApp }, { quoted: msg });
+                            continue;
+                        }
+
+                        if (isBrokerSelfServiceCommandText(trimmedText)) {
+                            if (identity.role === "EXTERNAL_CLIENT") {
+                                // Ignora ou não expõe dados internos para clientes externos
+                            } else {
+                                const selfResult = await executeBrokerSelfServiceCommand({
+                                    corretorNome: identity.nome,
+                                    comandoTexto: trimmedText,
+                                });
+                                if (selfResult.executado) {
+                                    await sock.sendMessage(remoteJid, { text: selfResult.respostaWhatsApp }, { quoted: msg });
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Pipeline de Voz Fricção Zero (Áudio de Corretor/Gestor ou tags #placar / #fechamento / #parecer / #captacao)
+                    if (hasAudio || /^#(placar|fechamento|parecer|captacao)/i.test(trimmedText)) {
+                        const identity = await resolveWhatsappRole(cleanSenderDigits, msg.pushName || undefined);
+
+                        if (
+                            identity.role === "COMMANDER_GESTOR" ||
+                            identity.role === "BROKER_CORRETOR" ||
+                            /^#(placar|fechamento|parecer|captacao)/i.test(trimmedText)
+                        ) {
+                            let audioBase64: string | undefined;
+                            if (hasAudio) {
+                                const buffer = (await downloadMediaMessage(msg as any, "buffer", {})) as Buffer;
+                                audioBase64 = buffer.toString("base64");
+                            }
+
+                            const isGestor = identity.role === "COMMANDER_GESTOR";
+
+                            const voiceResult = await processRhemaVoiceOrText({
+                                remetenteNome: identity.nome,
+                                isGestor,
+                                texto: trimmedText
+                                    ? trimmedText.replace(/^#(placar|fechamento|parecer|captacao)\s*/i, "")
+                                    : undefined,
+                                audioBase64,
+                                audioMimeType: content?.audioMessage?.mimetype || "audio/ogg",
+                            });
+
+                            // Se o Gestor Comandante enviou um áudio cujo texto transcrito é um comando executivo, executa também!
+                            if (isGestor && isManagerCommandText(voiceResult.transcricao)) {
+                                const cmdExec = await executeCommanderCommand({
+                                    comandoTexto: voiceResult.transcricao,
+                                    role: "COMMANDER_GESTOR",
+                                    remetenteNome: identity.nome,
+                                });
+                                await sock.sendMessage(remoteJid, { text: cmdExec.respostaWhatsApp }, { quoted: msg });
+                                continue;
+                            }
+
+                            const cardProprietarioBloco = voiceResult.cardPrestacaoContasProprietario
+                                ? `\n\n${voiceResult.cardPrestacaoContasProprietario}`
+                                : "";
+
+                            const replyMsg = `${voiceResult.respostaWhatsAppCalibrada}\n\n⚡ _Intenção:_ *${voiceResult.intencao}* (+${voiceResult.pontosPlacarEstimados} pts no Placar)\n📌 _Status:_ ${voiceResult.detalhePersistencia}${cardProprietarioBloco}`;
+                            await sock.sendMessage(remoteJid, { text: replyMsg }, { quoted: msg });
+                            continue;
+                        }
+                    }
+                } catch (errVoice) {
+                    logger.error("RhemaVoiceCopilot", "Erro ao processar áudio/comando do corretor no Baileys:", errVoice);
+                }
+            }
 
             if (!text) continue;
 
