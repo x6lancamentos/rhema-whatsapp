@@ -77,17 +77,43 @@ export default function RhemaOsCommandCenterPage() {
   const [loadingCmd, setLoadingCmd] = useState(false);
   const [rotinaExecutando, setRotinaExecutando] = useState<string | null>(null);
   const [dispararReal, setDispararReal] = useState(false);
+  const [rotinasAtivas, setRotinasAtivas] = useState(false);
 
   async function carregarDados() {
     try {
-      const res = await fetch("/api/ai-agent/commander");
-      const json = await res.json();
+      const [resCmd, resRoutines] = await Promise.all([
+        fetch("/api/ai-agent/commander"),
+        fetch("/api/ai-agent/daily-routines"),
+      ]);
+      const json = await resCmd.json();
       if (json.sucesso) {
         setCommanderPhones((json.commanderPhones || []).join(", "));
         setLearnCards(json.learnCards || []);
         setBrokers(json.brokers || []);
         const connected = (json.sessions || []).find((s: any) => s.status === "CONNECTED");
         if (connected) setSessionId(connected.sessionId);
+      }
+      const jsonR = await resRoutines.json();
+      if (jsonR.sucesso) {
+        setRotinasAtivas(Boolean(jsonR.rotinasAtivas));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function alternarStatusRotinas() {
+    const novo = !rotinasAtivas;
+    try {
+      const res = await fetch("/api/ai-agent/daily-routines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao: "TOGGLE", ativas: novo }),
+      });
+      const json = await res.json();
+      if (json.sucesso) {
+        setRotinasAtivas(json.rotinasAtivas);
+        setRespostaConsole(json.mensagem);
       }
     } catch {
       // ignore
@@ -180,10 +206,25 @@ export default function RhemaOsCommandCenterPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Scheduler 24/7 Ativo
-          </span>
+          {rotinasAtivas ? (
+            <button
+              onClick={alternarStatusRotinas}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition cursor-pointer"
+              title="Clique para pausar todas as rotinas autônomas"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              ▶️ Rotinas Autônomas: ATIVAS (Clique p/ Pausar)
+            </button>
+          ) : (
+            <button
+              onClick={alternarStatusRotinas}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer"
+              title="Clique para ativar as rotinas autônomas"
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              ⏸️ Rotinas Autônomas: PAUSADAS (Clique p/ Ativar)
+            </button>
+          )}
           <button
             onClick={() => carregarDados()}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-border hover:bg-muted transition-colors"

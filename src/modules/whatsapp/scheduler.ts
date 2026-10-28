@@ -1,12 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { waManager } from "./manager";
 import { logger } from "@/lib/logger";
-import { executarRotinaDiariaRhema, type RotinaRhemaTipo } from "@/lib/ai/rhema-daily-routines";
+import { executarRotinaDiariaRhema, isRhemaRoutinesEnabled, type RotinaRhemaTipo } from "@/lib/ai/rhema-daily-routines";
 
 const rotinasDisparadasPorData = new Set<string>();
 
 async function checkRhemaDailyRoutines() {
     try {
+        // Trava Global de Segurança: se estiver pausado, aborta imediatamente sem disparar nada
+        if (!isRhemaRoutinesEnabled()) {
+            return;
+        }
+
         const now = new Date();
         // Horário de Brasília (UTC-3)
         const brTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));

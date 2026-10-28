@@ -11,6 +11,18 @@ export type RotinaRhemaTipo =
   | "DOSSIE_PDI_OKR_SEXTA_1700"
   | "ESCALONAMENTO_SLA_GESTOR";
 
+// Trava Global de Segurança: por padrão fica PAUSADO até o Gestor ativar no dashboard ou via env
+let runtimeRoutinesEnabled = process.env.RHEMA_AUTONOMOUS_ROUTINES_ENABLED === "true";
+
+export function isRhemaRoutinesEnabled(): boolean {
+  return runtimeRoutinesEnabled;
+}
+
+export function setRhemaRoutinesEnabled(enabled: boolean): boolean {
+  runtimeRoutinesEnabled = enabled;
+  return runtimeRoutinesEnabled;
+}
+
 const MENSAGENS_ONBOARDING_CALIBRADAS: Record<string, (nome: string) => string> = {
   andre: () =>
     `Bom dia, André! 🙏\n\nCom 16 anos de mercado em Santos, você sabe que quem domina a pauta da manhã domina a mesa de fechamento.\n\nPara hoje:\n1. Qual é o atendimento mais estratégico da sua carteira para avançarmos em proposta?\n2. No seu bloco de captação (08h–09h), quais proprietários vamos posicionar na Exclusividade Rhema Premium?\n\nExcelente dia de negócios!`,
