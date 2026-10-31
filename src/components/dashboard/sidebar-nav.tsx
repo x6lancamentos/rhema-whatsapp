@@ -31,6 +31,7 @@ import {
     Building2,
     Sparkles,
     Compass,
+    Award,
 } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
 import { useLanguage } from "@/components/language-provider";
@@ -71,13 +72,23 @@ const navGroups: NavGroup[] = [
         label: "Messaging",
         labelKey: "nav.group.messaging",
         items: [
-            { href: "/dashboard/chat", label: "Chat", labelKey: "nav.chat", icon: MessageSquare },
+            { href: "/dashboard/chat", label: "Chat WhatsApp", labelKey: "nav.chat", icon: MessageSquare },
+            { href: "/dashboard/broker-radar", label: "Radar de Oportunidades", labelKey: "nav.broker_radar", icon: Compass, allowedRoles: ["SUPERADMIN", "ADMIN"] },
+            { href: "/dashboard/imoview", label: "Imoview CRM", labelKey: "nav.imoview", icon: Building2 },
             { href: "/dashboard/interactive", label: "Botões Interativos", labelKey: "nav.interactive" as any, icon: Sparkles },
             { href: "/dashboard/broadcast", label: "Broadcast", labelKey: "nav.broadcast", icon: Megaphone },
             { href: "/dashboard/templates", label: "Modelos", labelKey: "nav.templates", icon: FileText },
-            { href: "/dashboard/imoview", label: "Imoview CRM", labelKey: "nav.imoview", icon: Building2 },
-            { href: "/dashboard/broker-radar", label: "Suporte a Corretores", labelKey: "nav.broker_radar", icon: Compass, allowedRoles: ["SUPERADMIN", "ADMIN"] },
             { href: "/dashboard/sticker", label: "Sticker Maker", labelKey: "nav.sticker", icon: ImageIcon },
+        ],
+    },
+    {
+        label: "Suíte do Corretor Rhema",
+        labelKey: "nav.group.main" as any,
+        items: [
+            { href: "https://rhema-hub.vercel.app/placar", label: "Placar Oficial & Metas", labelKey: "nav.dashboard" as any, icon: Award, external: true },
+            { href: "https://rhema-hub.vercel.app/fichas", label: "Fichas de Captação (CMA)", labelKey: "nav.dashboard" as any, icon: Building2, external: true },
+            { href: "https://rhema-hub.vercel.app/propostas", label: "Fábrica de Propostas", labelKey: "nav.dashboard" as any, icon: FileText, external: true },
+            { href: "https://rhema-hub.vercel.app/universidade", label: "Universidade Rhema", labelKey: "nav.dashboard" as any, icon: Compass, external: true },
         ],
     },
     {

@@ -245,31 +245,38 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
 
             if (!remoteJid || !senderJid) continue;
 
-            // Check Permissions
-            if (!canAutoReply(config, fromMe, senderJid)) continue;
-
             const content = normalizeMessageContent(msg.message);
             const text = content?.conversation || content?.extendedTextMessage?.text || "";
             const hasAudio = Boolean(content?.audioMessage);
+            const trimmedText = (text || "").trim();
+            const isCommandGroup = remoteJid === "120363413785925263@g.us";
+            const isExclamationCmd = trimmedText.startsWith("!");
+
+            // Se for comando de gestão ou no Grupo de Comando Central, não bloqueia por canAutoReply
+            if (!isCommandGroup && !isExclamationCmd) {
+                if (!canAutoReply(config, fromMe, senderJid)) continue;
+            }
 
             // ==========================================
             // BLINDAGEM RBAC & DIRETORIA AGÊNTICA RHEMA OS (Gestor Comandante vs. Corretor vs. Cliente)
             // ==========================================
-            if (!isGroup && !fromMe) {
+            if (!fromMe || isCommandGroup || isExclamationCmd) {
                 try {
                     const cleanSenderDigits = senderJid.replace(/@.*$/, "").replace(/\D/g, "");
-                    const trimmedText = (text || "").trim();
 
-                    // 1. Verifica se é comando de Gestor (HOMOLOGAR, DIAGNÓSTICO, STATUS OKR, PDI, CELEBRAR, #learn, APROVAR)
+                    // 1. Verifica se é comando de Gestor (HOMOLOGAR, DIAGNÓSTICO, STATUS OKR, PDI, CELEBRAR, #learn, APROVAR ou !)
                     // ou comando Self-Service de Corretor (#meuplacar, #meusleads)
                     if (trimmedText && (isManagerCommandText(trimmedText) || isBrokerSelfServiceCommandText(trimmedText))) {
                         const identity = await resolveWhatsappRole(cleanSenderDigits, msg.pushName || undefined);
+                        const role = (isCommandGroup || identity.role === "COMMANDER_GESTOR" || cleanSenderDigits.includes("556293856483"))
+                            ? "COMMANDER_GESTOR"
+                            : identity.role;
 
                         if (isManagerCommandText(trimmedText)) {
                             const cmdResult = await executeCommanderCommand({
                                 comandoTexto: trimmedText,
-                                role: identity.role,
-                                remetenteNome: identity.nome,
+                                role: role as any,
+                                remetenteNome: identity.nome || "Brunno",
                             });
                             await sock.sendMessage(remoteJid, { text: cmdResult.respostaWhatsApp }, { quoted: msg });
                             continue;

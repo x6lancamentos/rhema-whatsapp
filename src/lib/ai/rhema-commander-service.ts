@@ -186,7 +186,7 @@ export async function resolveWhatsappRole(
  */
 export function isManagerCommandText(text: string): boolean {
   const t = text.trim();
-  return /^(homologar(\s+placar)?|diagnostico|diagnóstico|status\s+okr|comissoes|comissões|pdi\s+|celebrar\s+|#learn\b|aprovar\s+#?learn)/i.test(
+  return /^(homologar(\s+placar)?|diagnostico|diagnóstico|status\s+okr|comissoes|comissões|pdi\s+|celebrar\s+|#learn\b|aprovar\s+#?learn|![a-zA-Z0-9_-]+)/i.test(
     t
   );
 }
@@ -683,10 +683,249 @@ export async function executeCommanderCommand(options: {
     };
   }
 
+  // 8. COMANDOS DE 1 LINHA DO ORQUESTRADOR RHEMA (!buscar, !auditar-fila, !carteira, !transferir, !cpr, !match, !sdr, !briefing, !fechamento)
+  if (texto.startsWith("!")) {
+    const partes = texto.slice(1).trim().split(/\s+/);
+    const subCmd = partes[0].toLowerCase();
+    const argsRest = partes.slice(1).join(" ");
+
+    // 8.1. !buscar [termo]
+    if (subCmd === "buscar") {
+      if (!argsRest) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_BUSCAR",
+          respostaWhatsApp: "⚠️ *Uso correto:* `!buscar [nome ou telefone]`\nEx: `!buscar 99798-9886` ou `!buscar Douglas`",
+        };
+      }
+      try {
+        const { buscarNoImoview } = await import("@/lib/imoview-cli");
+        const resp = await buscarNoImoview(argsRest);
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_BUSCAR",
+          respostaWhatsApp: resp,
+        };
+      } catch (err: any) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_BUSCAR",
+          respostaWhatsApp: `❌ Erro ao buscar no CRM: ${err.message}`,
+        };
+      }
+    }
+
+    // 8.2. !auditar-fila (ou !fila)
+    if (subCmd === "auditar-fila" || subCmd === "fila" || subCmd === "fila-7dias") {
+      try {
+        const { auditarFila } = await import("@/lib/imoview-cli");
+        const resp = await auditarFila(7);
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_AUDITAR_FILA",
+          respostaWhatsApp: resp,
+        };
+      } catch (err: any) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_AUDITAR_FILA",
+          respostaWhatsApp: `❌ Erro ao auditar fila no CRM: ${err.message}`,
+        };
+      }
+    }
+
+    // 8.3. !carteira [corretor]
+    if (subCmd === "carteira") {
+      if (!argsRest) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_CARTEIRA",
+          respostaWhatsApp: "⚠️ *Uso correto:* `!carteira [nome ou id]`\nEx: `!carteira Tatiana` ou `!carteira Andressa`",
+        };
+      }
+      try {
+        const { carteiraDoCorretor } = await import("@/lib/imoview-cli");
+        const resp = await carteiraDoCorretor(argsRest);
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_CARTEIRA",
+          respostaWhatsApp: resp,
+        };
+      } catch (err: any) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_CARTEIRA",
+          respostaWhatsApp: `❌ Erro ao consultar carteira: ${err.message}`,
+        };
+      }
+    }
+
+    // 8.4. !transferir [id] -> [corretor]
+    if (subCmd === "transferir") {
+      // Formato: !transferir 1036 -> Ulisses OU !transferir 1036 para Ulisses
+      const matchTr = argsRest.match(/^(\d+)\s*(?:->|para|to)\s*([a-zA-Z0-9_\s]+)/i);
+      if (!matchTr) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_TRANSFERIR",
+          respostaWhatsApp: "⚠️ *Uso correto:* `!transferir [idAtendimento] -> [corretor]`\nEx: `!transferir 1036 -> Ulisses`",
+        };
+      }
+      try {
+        const { transferirAtendimento } = await import("@/lib/imoview-cli");
+        const resp = await transferirAtendimento({
+          codigoAtendimento: matchTr[1].trim(),
+          codigoNovoCorretor: matchTr[2].trim(),
+        });
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_TRANSFERIR",
+          respostaWhatsApp: resp.mensagem,
+        };
+      } catch (err: any) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_TRANSFERIR",
+          respostaWhatsApp: `❌ Erro na transferência: ${err.message}`,
+        };
+      }
+    }
+
+    // 8.5. !match [codigo_imovel]
+    if (subCmd === "match") {
+      try {
+        const { fetchRecentStockProperties, fetchHotLeadsForRadar, computeStockLeadMatches } = await import("@/lib/imoview-broker-radar");
+        const [props, leads] = await Promise.all([
+          fetchRecentStockProperties({ diasMaximos: 30, limite: 40 }),
+          fetchHotLeadsForRadar({ mode: "all_active", limite: 80 }),
+        ]);
+
+        let matches = computeStockLeadMatches(props, leads);
+        if (argsRest) {
+          const cod = argsRest.trim();
+          matches = matches.filter(m => m.property.codigo === cod || m.property.titulo.toLowerCase().includes(cod.toLowerCase()));
+        }
+
+        if (matches.length === 0) {
+          return {
+            permitido: true,
+            comandoIdentificado: "CMD_MATCH",
+            respostaWhatsApp: `🎯 *RADAR MATCHMAKER RHEMA*\nNenhum match com alta aderência (>=70%) encontrado para a referência informada no momento.`,
+          };
+        }
+
+        let out = `🎯 *RADAR MATCHMAKER RHEMA* (${matches.length} matches qualificados)\n─────────────────────────────────────\n`;
+        for (const m of matches.slice(0, 4)) {
+          out += `🔥 *${m.score}% Match:* Imóvel *#${m.property.codigo}* (${m.property.bairro} - ${m.property.valor})\n`;
+          out += `• Lead: *${m.lead.clienteNome}* (${m.lead.telefone})\n`;
+          out += `• Corretor: *${m.corretorNome}*\n`;
+          out += `• Fit: ${m.reasons.slice(0, 2).join(" • ")}\n\n`;
+        }
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_MATCH",
+          respostaWhatsApp: out.trim(),
+        };
+      } catch (err: any) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_MATCH",
+          respostaWhatsApp: `❌ Erro no Radar Matchmaker: ${err.message}`,
+        };
+      }
+    }
+
+    // 8.6. !cpr (Dead-Deal CPR)
+    if (subCmd === "cpr" || subCmd === "dead-deal") {
+      try {
+        const { fetchHotLeadsForRadar } = await import("@/lib/imoview-broker-radar");
+        const leads = await fetchHotLeadsForRadar({ mode: "all_active", limite: 40 });
+        const parados = leads.filter(l => l.diasSemContato >= 3 && l.diasSemContato <= 7);
+
+        if (parados.length === 0) {
+          return {
+            permitido: true,
+            comandoIdentificado: "CMD_CPR",
+            respostaWhatsApp: `🚑 *PROTOCOLO DEAD-DEAL CPR RHEMA*\nNenhum lead parado na janela crítica de 3 a 7 dias sem interação! Fila saudável.`,
+          };
+        }
+
+        let out = `🚑 *PROTOCOLO DEAD-DEAL CPR RHEMA* (${parados.length} oportunidades para ressuscitar)\n─────────────────────────────────────\n`;
+        for (const p of parados.slice(0, 3)) {
+          const primeiroNome = p.clienteNome.split(" ")[0];
+          out += `📌 *Card #${p.atendimentoId}* | Corretor: *${p.corretorNome}*\n• Cliente: *${p.clienteNome}* (${p.telefone}) | ⏳ ${p.diasSemContato}d sem contato\n`;
+          out += `💬 *Script Pronto para Copiar e Colar:*\n_"Oi ${primeiroNome}! Aqui é da Rhema Imóveis. Entrou uma novidade exclusiva no ${p.bairroInteresse || "bairro"} que ainda nem foi pros portais e lembrei do que você busca. Consegue falar 2 min hoje?"_\n\n`;
+        }
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_CPR",
+          respostaWhatsApp: out.trim(),
+        };
+      } catch (err: any) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_CPR",
+          respostaWhatsApp: `❌ Erro no protocolo CPR: ${err.message}`,
+        };
+      }
+    }
+
+    // 8.7. !briefing / !fechamento
+    if (subCmd === "briefing" || subCmd === "fechamento") {
+      const isBriefing = subCmd === "briefing";
+      const dados = await carregarResumoSupabaseMes();
+      const top3 = dados.resumoPorCorretor.slice(0, 3);
+      const rankingStr = top3
+        .map((c, i) => `${i + 1}º *${c.apelido}* (${c.pontosMes} pts)`)
+        .join(" • ");
+
+      const txt = isBriefing
+        ? `☀️ *BRIEFING MATINAL DO GESTOR — RHEMA OS*\n─────────────────────────────────────\n🏆 *Top 3 no Placar:* ${rankingStr || "Atualizando..."}\n⚡ *Pautas Prioritárias Hoje:*\n1. Primeiro contato nos novos leads de campanha (<15 min SLA)\n2. Pareceres de visitas pendentes (>24h cobrar áudio de 30s)\n3. Foco em captação Rhema Premium (Exclusividade 90 dias)\n─────────────────────────────────────\n🚀 _Excelente dia de trabalho e fechamentos, Comandante!_`
+        : `🌙 *FECHAMENTO EXECUTIVO DO DIA — RHEMA OS*\n─────────────────────────────────────\n📊 *Produção Homologada:* Resumo pronto para validação.\n🏆 *Liderança do Dia:* ${rankingStr}\n💰 *VGV em Mesa:* Propostas em andamento com alto potencial.\n─────────────────────────────────────\nPara homologar os pontos do dia em 1 clique, responda: *HOMOLOGAR*`;
+
+      return {
+        permitido: true,
+        comandoIdentificado: isBriefing ? "CMD_BRIEFING" : "CMD_FECHAMENTO",
+        respostaWhatsApp: txt,
+      };
+    }
+
+    // 8.8. !sdr [cliente / contexto]
+    if (subCmd === "sdr") {
+      try {
+        const { analyzeLeadWithAutonomousSdr } = await import("./rhema-sdr-agent");
+        const sdrResult = await analyzeLeadWithAutonomousSdr({
+          clienteNome: argsRest || "Cliente Novo",
+          historicoMensagens: [
+            { remetente: "CLIENTE", texto: "Olá, gostaria de saber mais informações sobre o imóvel do anúncio." },
+          ],
+        });
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_SDR",
+          respostaWhatsApp: `🤖 *AGENTE SDR AUTÔNOMO (4 PILARES & MEET 15 MIN)*\n─────────────────────────────────────\n${sdrResult.formatoTextoCopiloto}`,
+        };
+      } catch (err: any) {
+        return {
+          permitido: true,
+          comandoIdentificado: "CMD_SDR",
+          respostaWhatsApp: `❌ Erro no Agente SDR: ${err.message}`,
+        };
+      }
+    }
+
+    // Ajuda para comandos ! não reconhecidos
+    return {
+      permitido: true,
+      comandoIdentificado: "CMD_HELP",
+      respostaWhatsApp: `⚡ *COMANDOS DISPONÍVEIS NO RHEMA COMMAND CENTER:*\n• \`!buscar [nome/tel]\` — Varredura no Imoview\n• \`!auditar-fila\` — Leads > 7 dias (com blindagem LEAD CORRETOR)\n• \`!carteira [corretor]\` — Raio-X completo do corretor\n• \`!transferir [id] -> [corretor]\` — Transfere sem duplicar\n• \`!match [codigo]\` — Radar Matchmaker Semântico\n• \`!cpr\` — Protocolo Dead-Deal CPR (>3 dias)\n• \`!sdr [cliente]\` — Diagnóstico 4 Pilares + Pré-Visita Meet\n• \`!briefing\` / \`!fechamento\` — Relatórios executivos\n• *DIAGNÓSTICO [Nome]* — 4 Taxas de Conversão\n• *HOMOLOGAR* — Homologar Placar do dia\n• *STATUS OKR* — VGV e Comissões (6%)`,
+    };
+  }
+
   return {
     permitido: true,
     comandoIdentificado: "COMANDO_GERAL_GESTOR",
-    respostaWhatsApp: `🎯 *CENTRAL DE COMANDO DO GESTOR — RHEMA OS*\nComandos rápidos exclusivos disponíveis:\n• *HOMOLOGAR* — Homologar Placar do dia em 1 clique\n• *DIAGNÓSTICO GERAL* ou *DIAGNÓSTICO [Nome]* — 4 Taxas + Cap. 08-11\n• *PDI [Nome]* — Dossiê completo de reunião 1:1\n• *STATUS OKR* ou *COMISSÕES* — VGV + Split 6% (30/15/7/48%)\n• *CELEBRAR [Nome] [Valor]* — Disparar celebração no Telão\n• *#learn [observação]* e *APROVAR #LEARN-001* — Governança Agêntica`,
+    respostaWhatsApp: `🎯 *CENTRAL DE COMANDO DO GESTOR — RHEMA OS*\nComandos rápidos exclusivos disponíveis:\n• \`!buscar [nome/tel]\`\n• \`!auditar-fila\`\n• \`!carteira [corretor]\`\n• \`!sdr [nome]\`\n• \`!briefing\` e \`!fechamento\`\n• *HOMOLOGAR* — Homologar Placar do dia em 1 clique\n• *DIAGNÓSTICO GERAL* ou *DIAGNÓSTICO [Nome]* — 4 Taxas + Cap. 08-11\n• *STATUS OKR* ou *COMISSÕES* — VGV + Split 6% (30/15/7/48%)`,
   };
 }
 

@@ -31,20 +31,23 @@ export async function GET(request: NextRequest) {
     const tipo = searchParams.get("tipo") || undefined;
     const corretorCodigo = searchParams.get("corretorCodigo") || undefined;
     const finalidade = searchParams.get("finalidade") || "2"; // Venda por padrão
+    const forceRefresh = searchParams.get("refresh") === "true";
 
-    // Busca em paralelo na API do Imoview em tempo real
+    // Busca em paralelo na API do Imoview (com Cache Stale-While-Revalidate de 5 min)
     const [properties, leads] = await Promise.all([
       fetchRecentStockProperties({
         diasMaximos: diasEstoque,
         finalidade,
         bairro,
         tipo,
-        limite: 60,
+        limite: 80,
+        forceRefresh,
       }),
       fetchHotLeadsForRadar({
         mode: leadMode,
         corretorCodigo,
         limite: 150,
+        forceRefresh,
       }),
     ]);
 

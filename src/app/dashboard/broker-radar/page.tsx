@@ -247,15 +247,13 @@ export default function BrokerRadarPage() {
   }, []);
 
   // 3. Carregar Matches de Estoque e Leads
-  const loadMatches = useCallback(async () => {
+  const loadMatches = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingMatches(true);
       const params = new URLSearchParams();
       params.set("diasEstoque", String(diasEstoque));
       params.set("leadMode", leadMode);
-      if (bairroFiltro) params.set("bairro", bairroFiltro);
-      if (tipoFiltro) params.set("tipo", tipoFiltro);
-      if (corretorFiltro) params.set("corretorCodigo", corretorFiltro);
+      if (forceRefresh) params.set("refresh", "true");
 
       const res = await fetch(`/api/integrations/imoview/broker-radar/matches?${params.toString()}`);
       if (res.ok) {
@@ -271,13 +269,16 @@ export default function BrokerRadarPage() {
     } finally {
       setLoadingMatches(false);
     }
-  }, [diasEstoque, leadMode, bairroFiltro, tipoFiltro, corretorFiltro]);
+  }, [diasEstoque, leadMode]);
 
-  // 4. Carregar Cadência e SLA de Atividades
-  const loadCadence = useCallback(async () => {
+  // 4. Carregar Cadência e SLA de Atividades (Sob Demanda / Lazy Load)
+  const loadCadence = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingCadence(true);
-      const res = await fetch("/api/integrations/imoview/broker-radar/cadence");
+      const url = forceRefresh
+        ? "/api/integrations/imoview/broker-radar/cadence?refresh=true"
+        : "/api/integrations/imoview/broker-radar/cadence";
+      const res = await fetch(url);
       if (res.ok) {
         const d = await res.json();
         setCadenceList(d.data?.cadence || []);
@@ -293,9 +294,15 @@ export default function BrokerRadarPage() {
   useEffect(() => {
     loadSessions();
     loadBrokerContacts();
-    loadMatches();
-    loadCadence();
-  }, [loadSessions, loadBrokerContacts, loadMatches, loadCadence]);
+    loadMatches(false);
+  }, [loadSessions, loadBrokerContacts, loadMatches]);
+
+  // Lazy-load da Cadência apenas quando abrir a aba ou em background após 2s
+  useEffect(() => {
+    if (activeTab === "cadencia" && cadenceList.length === 0 && !loadingCadence) {
+      loadCadence(false);
+    }
+  }, [activeTab, cadenceList.length, loadingCadence, loadCadence]);
 
   // Mapa de telefones de corretores cadastrados para lookup rápido
   const brokerPhoneMap = useMemo(() => {
@@ -337,19 +344,36 @@ export default function BrokerRadarPage() {
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
   }, [matches]);
 
-  // Filtragem de Matches pela barra de pesquisa
+  // Filtragem Instantânea Client-Side (0ms de latência ao digitar bairro, busca ou trocar corretor)
   const filteredMatches = useMemo(() => {
-    if (!searchTerm) return matches;
-    const q = searchTerm.toLowerCase();
-    return matches.filter(
-      (m) =>
-        m.property.codigo.includes(q) ||
+    const q = searchTerm.toLowerCase().trim();
+    const bFilter = bairroFiltro.toLowerCase().trim();
+    const tFilter = tipoFiltro.toLowerCase().trim();
+
+    return matches.filter((m) => {
+      if (bFilter && !m.property.bairro.toLowerCase().includes(bFilter)) {
+        return false;
+      }
+      if (tFilter && !m.property.tipo.toLowerCase().includes(tFilter)) {
+        return false;
+      }
+      if (
+        corretorFiltro &&
+        m.corretorCodigo !== corretorFiltro &&
+        m.corretorNome !== corretorFiltro
+      ) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        m.property.codigo.toLowerCase().includes(q) ||
         m.property.bairro.toLowerCase().includes(q) ||
         m.property.tipo.toLowerCase().includes(q) ||
         m.lead.clienteNome.toLowerCase().includes(q) ||
         m.corretorNome.toLowerCase().includes(q)
-    );
-  }, [matches, searchTerm]);
+      );
+    });
+  }, [matches, searchTerm, bairroFiltro, tipoFiltro, corretorFiltro]);
 
   // Abertura do modal de envio de Match individual
   const handleOpenDispatchMatch = (match: RadarMatch) => {
@@ -610,8 +634,8 @@ export default function BrokerRadarPage() {
             variant="outline"
             size="sm"
             onClick={() => {
-              loadMatches();
-              loadCadence();
+              loadMatches(true);
+              if (activeTab === "cadencia") loadCadence(true);
               loadBrokerContacts();
             }}
             disabled={loadingMatches || loadingCadence}
@@ -1066,7 +1090,7 @@ export default function BrokerRadarPage() {
                   cadência com 1 clique.
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" onClick={loadCadence} disabled={loadingCadence} className="gap-2">
+              <Button variant="outline" size="sm" onClick={() => loadCadence(true)} disabled={loadingCadence} className="gap-2">
                 <RefreshCw className={`h-3.5 w-3.5 ${loadingCadence ? "animate-spin text-emerald-500" : ""}`} />
                 Atualizar Agenda
               </Button>
