@@ -228,7 +228,7 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
 
         logger.debug("AutoReply", `Processing for ${sessionId}. Config: ${config ? "Found" : "Missing"}, ${config?.enabled ? "Enabled" : "Disabled"}`);
 
-        if (!config || !config.enabled) return;
+        const isBotEnabled = Boolean(config?.enabled);
 
         for (const msg of messages) {
             const fromMe = msg.key.fromMe || false;
@@ -251,103 +251,129 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
             const trimmedText = (text || "").trim();
             const isCommandGroup = remoteJid === "120363413785925263@g.us";
             const isExclamationCmd = trimmedText.startsWith("!");
+            const isCommanderMsg = isCommandGroup || isExclamationCmd || isManagerCommandText(trimmedText);
 
-            // Se for comando de gestão ou no Grupo de Comando Central, não bloqueia por canAutoReply
-            if (!isCommandGroup && !isExclamationCmd) {
-                if (!canAutoReply(config, fromMe, senderJid)) continue;
+            // Se for mensagem enviada pelo próprio bot e NÃO for comando explícito com !, ignora para evitar loop/eco
+            if (fromMe && !isExclamationCmd) {
+                continue;
             }
 
             // ==========================================
             // BLINDAGEM RBAC & DIRETORIA AGÊNTICA RHEMA OS (Gestor Comandante vs. Corretor vs. Cliente)
             // ==========================================
-            if (!fromMe || isCommandGroup || isExclamationCmd) {
-                try {
-                    const cleanSenderDigits = senderJid.replace(/@.*$/, "").replace(/\D/g, "");
+            try {
+                const cleanSenderDigits = senderJid.replace(/@.*$/, "").replace(/\D/g, "");
+                const isBrunno =
+                    cleanSenderDigits.includes("556293856483") ||
+                    cleanSenderDigits.includes("6293856483") ||
+                    cleanSenderDigits.includes("556282312764") ||
+                    cleanSenderDigits.includes("6282312764") ||
+                    cleanSenderDigits.includes("59163423719") ||
+                    /brunno/i.test(msg.pushName || "");
 
-                    // 1. Verifica se é comando de Gestor (HOMOLOGAR, DIAGNÓSTICO, STATUS OKR, PDI, CELEBRAR, #learn, APROVAR ou !)
-                    // ou comando Self-Service de Corretor (#meuplacar, #meusleads)
-                    if (trimmedText && (isManagerCommandText(trimmedText) || isBrokerSelfServiceCommandText(trimmedText))) {
-                        const identity = await resolveWhatsappRole(cleanSenderDigits, msg.pushName || undefined);
-                        const role = (isCommandGroup || identity.role === "COMMANDER_GESTOR" || cleanSenderDigits.includes("556293856483"))
-                            ? "COMMANDER_GESTOR"
-                            : identity.role;
+                // 1. Processamento prioritário do Rhema OS Commander (!buscar, !carteira, !cpr, !match, !auditar-fila, etc.)
+                if (trimmedText && (isManagerCommandText(trimmedText) || isBrokerSelfServiceCommandText(trimmedText) || isCommandGroup)) {
+                    const identity = await resolveWhatsappRole(cleanSenderDigits, msg.pushName || undefined);
+                    const role = (isCommandGroup || isBrunno || identity.role === "COMMANDER_GESTOR")
+                        ? "COMMANDER_GESTOR"
+                        : identity.role;
 
-                        if (isManagerCommandText(trimmedText)) {
-                            const cmdResult = await executeCommanderCommand({
-                                comandoTexto: trimmedText,
-                                role: role as any,
-                                remetenteNome: identity.nome || "Brunno",
-                            });
+                    if (isManagerCommandText(trimmedText) || (isCommandGroup && isExclamationCmd)) {
+                        logger.info("AutoReply", `[Rhema Commander] Executando "${trimmedText}" para ${identity.nome || (isBrunno ? 'Brunno Anastácio' : cleanSenderDigits)} no chat ${remoteJid}`);
+                        const cmdResult = await executeCommanderCommand({
+                            comandoTexto: trimmedText,
+                            role: role as any,
+                            remetenteNome: identity.nome || (isBrunno ? "Brunno Anastácio" : "Gestor"),
+                        });
+
+                        try {
                             await sock.sendMessage(remoteJid, { text: cmdResult.respostaWhatsApp }, { quoted: msg });
-                            continue;
+                        } catch (sendErr) {
+                            logger.warn("AutoReply", "Falha ao enviar com quoted, enviando direto:", sendErr);
+                            await sock.sendMessage(remoteJid, { text: cmdResult.respostaWhatsApp });
                         }
-
-                        if (isBrokerSelfServiceCommandText(trimmedText)) {
-                            if (identity.role === "EXTERNAL_CLIENT") {
-                                // Ignora ou não expõe dados internos para clientes externos
-                            } else {
-                                const selfResult = await executeBrokerSelfServiceCommand({
-                                    corretorNome: identity.nome,
-                                    comandoTexto: trimmedText,
-                                });
-                                if (selfResult.executado) {
-                                    await sock.sendMessage(remoteJid, { text: selfResult.respostaWhatsApp }, { quoted: msg });
-                                    continue;
-                                }
-                            }
-                        }
+                        continue;
                     }
 
-                    // 2. Pipeline de Voz Fricção Zero (Áudio de Corretor/Gestor ou tags #placar / #fechamento / #parecer / #captacao)
-                    if (hasAudio || /^#(placar|fechamento|parecer|captacao)/i.test(trimmedText)) {
-                        const identity = await resolveWhatsappRole(cleanSenderDigits, msg.pushName || undefined);
-
-                        if (
-                            identity.role === "COMMANDER_GESTOR" ||
-                            identity.role === "BROKER_CORRETOR" ||
-                            /^#(placar|fechamento|parecer|captacao)/i.test(trimmedText)
-                        ) {
-                            let audioBase64: string | undefined;
-                            if (hasAudio) {
-                                const buffer = (await downloadMediaMessage(msg as any, "buffer", {})) as Buffer;
-                                audioBase64 = buffer.toString("base64");
-                            }
-
-                            const isGestor = identity.role === "COMMANDER_GESTOR";
-
-                            const voiceResult = await processRhemaVoiceOrText({
-                                remetenteNome: identity.nome,
-                                isGestor,
-                                texto: trimmedText
-                                    ? trimmedText.replace(/^#(placar|fechamento|parecer|captacao)\s*/i, "")
-                                    : undefined,
-                                audioBase64,
-                                audioMimeType: content?.audioMessage?.mimetype || "audio/ogg",
+                    if (isBrokerSelfServiceCommandText(trimmedText)) {
+                        if (identity.role === "EXTERNAL_CLIENT" && !isBrunno) {
+                            // Ignora ou não expõe dados internos para clientes externos
+                        } else {
+                            const selfResult = await executeBrokerSelfServiceCommand({
+                                corretorNome: identity.nome,
+                                comandoTexto: trimmedText,
                             });
-
-                            // Se o Gestor Comandante enviou um áudio cujo texto transcrito é um comando executivo, executa também!
-                            if (isGestor && isManagerCommandText(voiceResult.transcricao)) {
-                                const cmdExec = await executeCommanderCommand({
-                                    comandoTexto: voiceResult.transcricao,
-                                    role: "COMMANDER_GESTOR",
-                                    remetenteNome: identity.nome,
-                                });
-                                await sock.sendMessage(remoteJid, { text: cmdExec.respostaWhatsApp }, { quoted: msg });
+                            if (selfResult.executado) {
+                                try {
+                                    await sock.sendMessage(remoteJid, { text: selfResult.respostaWhatsApp }, { quoted: msg });
+                                } catch (sendErr) {
+                                    await sock.sendMessage(remoteJid, { text: selfResult.respostaWhatsApp });
+                                }
                                 continue;
                             }
-
-                            const cardProprietarioBloco = voiceResult.cardPrestacaoContasProprietario
-                                ? `\n\n${voiceResult.cardPrestacaoContasProprietario}`
-                                : "";
-
-                            const replyMsg = `${voiceResult.respostaWhatsAppCalibrada}\n\n⚡ _Intenção:_ *${voiceResult.intencao}* (+${voiceResult.pontosPlacarEstimados} pts no Placar)\n📌 _Status:_ ${voiceResult.detalhePersistencia}${cardProprietarioBloco}`;
-                            await sock.sendMessage(remoteJid, { text: replyMsg }, { quoted: msg });
-                            continue;
                         }
                     }
-                } catch (errVoice) {
-                    logger.error("RhemaVoiceCopilot", "Erro ao processar áudio/comando do corretor no Baileys:", errVoice);
                 }
+
+                // 2. Pipeline de Voz Fricção Zero (Áudio de Corretor/Gestor ou tags #placar / #fechamento / #parecer / #captacao)
+                if (hasAudio || /^#(placar|fechamento|parecer|captacao)/i.test(trimmedText)) {
+                    const identity = await resolveWhatsappRole(cleanSenderDigits, msg.pushName || undefined);
+
+                    if (
+                        identity.role === "COMMANDER_GESTOR" ||
+                        identity.role === "BROKER_CORRETOR" ||
+                        isBrunno ||
+                        /^#(placar|fechamento|parecer|captacao)/i.test(trimmedText)
+                    ) {
+                        let audioBase64: string | undefined;
+                        if (hasAudio) {
+                            const buffer = (await downloadMediaMessage(msg as any, "buffer", {})) as Buffer;
+                            audioBase64 = buffer.toString("base64");
+                        }
+
+                        const isGestor = identity.role === "COMMANDER_GESTOR" || isBrunno;
+
+                        const voiceResult = await processRhemaVoiceOrText({
+                            remetenteNome: identity.nome || (isBrunno ? "Brunno Anastácio" : "Corretor"),
+                            isGestor,
+                            texto: trimmedText
+                                ? trimmedText.replace(/^#(placar|fechamento|parecer|captacao)\s*/i, "")
+                                : undefined,
+                            audioBase64,
+                            audioMimeType: content?.audioMessage?.mimetype || "audio/ogg",
+                        });
+
+                        // Se o Gestor Comandante enviou um áudio cujo texto transcrito é um comando executivo, executa também!
+                        if (isGestor && isManagerCommandText(voiceResult.transcricao)) {
+                            const cmdExec = await executeCommanderCommand({
+                                comandoTexto: voiceResult.transcricao,
+                                role: "COMMANDER_GESTOR",
+                                remetenteNome: identity.nome || "Brunno Anastácio",
+                            });
+                            const respostaFinal = `${voiceResult.respostaWhatsAppCalibrada}\n\n🤖 *AÇÃO EXECUTADA AUTOMATICAMENTE:*\n${cmdExec.respostaWhatsApp}`;
+                            try {
+                                await sock.sendMessage(remoteJid, { text: respostaFinal }, { quoted: msg });
+                            } catch (e) {
+                                await sock.sendMessage(remoteJid, { text: respostaFinal });
+                            }
+                            continue;
+                        }
+
+                        try {
+                            await sock.sendMessage(remoteJid, { text: voiceResult.respostaWhatsAppCalibrada }, { quoted: msg });
+                        } catch (e) {
+                            await sock.sendMessage(remoteJid, { text: voiceResult.respostaWhatsAppCalibrada });
+                        }
+                        continue;
+                    }
+                }
+            } catch (errRBAC) {
+                logger.error("AutoReply", "Erro no processamento Rhema Commander/Voz:", errRBAC);
+            }
+
+            // 3. Se for mensagem comum de cliente/grupo, verifica permissões do Chatbot (AutoReply)
+            if (!isBotEnabled || !canAutoReply(config, fromMe, senderJid)) {
+                continue;
             }
 
             if (!text) continue;

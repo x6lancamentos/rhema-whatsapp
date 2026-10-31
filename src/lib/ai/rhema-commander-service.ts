@@ -426,8 +426,9 @@ export async function executeCommanderCommand(options: {
   const { comandoTexto, role, remetenteNome } = options;
   const texto = comandoTexto.trim();
 
-  // Trava Rígida RBAC: Corretores ou externos NUNCA executam comandos de comando executivo
-  if (role !== "COMMANDER_GESTOR") {
+  // Trava Rígida RBAC: Comandos executivos críticos restritos à Diretoria Comercial
+  const isExecutiveExclusive = /^(homologar|aprovar|!transferir|!auditar-fila|!auditar-corretor)/i.test(texto);
+  if (role !== "COMMANDER_GESTOR" && isExecutiveExclusive) {
     logger.warn(
       "RhemaRBAC",
       `Bloqueio RBAC: "${remetenteNome}" (${role}) tentou executar comando exclusivo de gestor: "${texto}"`
@@ -435,7 +436,7 @@ export async function executeCommanderCommand(options: {
     return {
       permitido: false,
       comandoIdentificado: "BLOQUEADO_RBAC",
-      respostaWhatsApp: `🔒 *Acesso Restrito à Diretoria Comercial*\nEste comando é exclusivo do Gestor Comandante (Brunno Anastácio).\n\n💡 _Comandos disponíveis para sua carteira individual:_\n• *#meuplacar* — Ver sua pontuação de hoje e quanto falta para o Bônus Dia Consistente (+20 pts)\n• *#meusleads* — Ver seus clientes prioritários e scripts de resgate\n• Ou envie um *áudio de 30s* com seu parecer de visita, pré-captação ou fechamento do dia!`,
+      respostaWhatsApp: `🔒 *Acesso Restrito à Diretoria Comercial*\nO comando "${texto.split(" ")[0]}" é exclusivo do Gestor Comandante (Brunno Anastácio).\n\n💡 _Comandos operacionais disponíveis:_\n• *!buscar [nome/tel]* — Consulta no Imoview\n• *!carteira [seu nome]* — Raio-X dos seus atendimentos\n• *!match [código]* — Cruzamento inteligente com compradores\n• *#meuplacar* — Seus pontos de hoje no Placar Rhema`,
     };
   }
 
