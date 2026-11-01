@@ -65,6 +65,7 @@ const navGroups: NavGroup[] = [
         labelKey: "nav.group.main",
         items: [
             { href: "/dashboard", label: "Dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+            { href: "/dashboard/rhema-hub", label: "Rhema Hub (App do Corretor)", labelKey: "nav.rhema_hub", icon: Sparkles },
             { href: "/dashboard/sessions", label: "Sessions / QR", labelKey: "nav.sessions", icon: QrCode },
         ],
     },
@@ -79,16 +80,6 @@ const navGroups: NavGroup[] = [
             { href: "/dashboard/broadcast", label: "Broadcast", labelKey: "nav.broadcast", icon: Megaphone },
             { href: "/dashboard/templates", label: "Modelos", labelKey: "nav.templates", icon: FileText },
             { href: "/dashboard/sticker", label: "Sticker Maker", labelKey: "nav.sticker", icon: ImageIcon },
-        ],
-    },
-    {
-        label: "Suíte do Corretor Rhema",
-        labelKey: "nav.group.main" as any,
-        items: [
-            { href: "https://rhema-hub.vercel.app/placar", label: "Placar Oficial & Metas", labelKey: "nav.dashboard" as any, icon: Award, external: true },
-            { href: "https://rhema-hub.vercel.app/fichas", label: "Fichas de Captação (CMA)", labelKey: "nav.dashboard" as any, icon: Building2, external: true },
-            { href: "https://rhema-hub.vercel.app/propostas", label: "Fábrica de Propostas", labelKey: "nav.dashboard" as any, icon: FileText, external: true },
-            { href: "https://rhema-hub.vercel.app/universidade", label: "Universidade Rhema", labelKey: "nav.dashboard" as any, icon: Compass, external: true },
         ],
     },
     {

@@ -12,6 +12,7 @@ export const translations = {
 
     // Navigation Items
     "nav.dashboard": "Dashboard",
+    "nav.rhema_hub": "Rhema Hub (App do Corretor)",
     "nav.sessions": "Sessões / QR",
     "nav.chat": "Atendimento Chat",
     "nav.interactive": "Botões Interativos",
@@ -122,6 +123,7 @@ export const translations = {
 
     // Navigation Items
     "nav.dashboard": "Dashboard",
+    "nav.rhema_hub": "Rhema Hub (Broker Suite)",
     "nav.sessions": "Sessions / QR",
     "nav.chat": "Chat",
     "nav.interactive": "Interactive Buttons",
