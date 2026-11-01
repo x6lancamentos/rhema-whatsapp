@@ -81,36 +81,6 @@ export const OFFICIAL_RHEMA_BROKERS: RhemaOfficialBroker[] = [
     equipe: "Vendas",
   },
   {
-    nomeOficial: "Roseli de Carvalho Lopes",
-    nomesConhecidos: [
-      "roseli de carvalho lopes",
-      "roseli carvalho",
-      "roseli lopes",
-      "roseli",
-    ],
-    imoviewCodigo: "11",
-    telefone: "5513974103368",
-    email: "roseli@rhemaimobiliaria.com.br",
-    equipe: "Vendas",
-  },
-  {
-    nomeOficial: "André Felipe O. Cavalcante",
-    nomesConhecidos: [
-      "andre felipe o. cavalcante",
-      "andré felipe o. cavalcante",
-      "andre felipe",
-      "andré felipe",
-      "andre cavalcante",
-      "andré cavalcante",
-      "andre",
-      "andré",
-    ],
-    imoviewCodigo: "17",
-    telefone: "5513981404451",
-    email: "andre@rhemaimobiliaria.com.br",
-    equipe: "Vendas",
-  },
-  {
     nomeOficial: "Ulisses Dias Vieira",
     nomesConhecidos: [
       "ulisses dias vieira",
@@ -133,17 +103,6 @@ export const OFFICIAL_RHEMA_BROKERS: RhemaOfficialBroker[] = [
     imoviewCodigo: "16",
     telefone: "5513992123879",
     email: "kaylane@rhemaimobiliaria.com.br",
-    equipe: "Vendas",
-  },
-  {
-    nomeOficial: "Luana Cardoso",
-    nomesConhecidos: [
-      "luana cardoso",
-      "luana",
-    ],
-    imoviewCodigo: "19",
-    telefone: "5513996960556",
-    email: "luana@rhemaimobiliaria.com.br",
     equipe: "Vendas",
   },
 ];
@@ -245,6 +204,37 @@ export async function seedOfficialBrokers() {
         seededCount++;
       }
     }
+    // Desativa explicitamente os corretores revogados pela diretoria (Roseli, Luana, André)
+    await prisma.brokerContact.updateMany({
+      where: {
+        OR: [
+          { nome: { contains: "Roseli" } },
+          { nome: { contains: "Luana" } },
+          { nome: { contains: "André" } },
+          { nome: { contains: "Andre" } },
+          { imoviewCodigo: { in: ["11", "17", "19"] } },
+          { telefone: { in: ["5513974103368", "5513981404451", "5513996960556"] } },
+        ],
+      },
+      data: { ativo: false },
+    });
+
+    await prisma.user.updateMany({
+      where: {
+        OR: [
+          { name: { contains: "Roseli" } },
+          { name: { contains: "Luana" } },
+          { name: { contains: "André" } },
+          { name: { contains: "Andre" } },
+          { email: { contains: "roseli" } },
+          { email: { contains: "luana" } },
+          { email: { contains: "andre" } },
+          { phone: { in: ["13974103368", "13981404451", "13996960556", "5513974103368", "5513981404451", "5513996960556"] } },
+        ],
+      },
+      data: { isActive: false },
+    });
+
     logger.info("RhemaBrokers", `Sincronização de corretores oficiais concluída. Novos cadastrados: ${seededCount}`);
     return true;
   } catch (err: any) {

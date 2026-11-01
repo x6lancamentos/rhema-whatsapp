@@ -39,20 +39,6 @@ const OFFICIAL_RHEMA_BROKERS = [
     equipe: "Vendas",
   },
   {
-    nomeOficial: "Roseli de Carvalho Lopes",
-    imoviewCodigo: "11",
-    telefone: "5513974103368",
-    email: "roseli@rhemaimobiliaria.com.br",
-    equipe: "Vendas",
-  },
-  {
-    nomeOficial: "André Felipe O. Cavalcante",
-    imoviewCodigo: "17",
-    telefone: "5513981404451",
-    email: "andre@rhemaimobiliaria.com.br",
-    equipe: "Vendas",
-  },
-  {
     nomeOficial: "Ulisses Dias Vieira",
     imoviewCodigo: "25",
     telefone: "5513988181515",
@@ -64,13 +50,6 @@ const OFFICIAL_RHEMA_BROKERS = [
     imoviewCodigo: "16",
     telefone: "5513992123879",
     email: "kaylane@rhemaimobiliaria.com.br",
-    equipe: "Vendas",
-  },
-  {
-    nomeOficial: "Luana Cardoso",
-    imoviewCodigo: "19",
-    telefone: "5513996960556",
-    email: "luana@rhemaimobiliaria.com.br",
     equipe: "Vendas",
   },
 ];
@@ -118,7 +97,39 @@ async function main() {
       count++;
     }
   }
-  console.log(`✅ Concluído! Total processado: ${OFFICIAL_RHEMA_BROKERS.length}`);
+
+  // Desativa explicitamente os corretores revogados pela diretoria (Roseli, Luana, André)
+  await prisma.brokerContact.updateMany({
+    where: {
+      OR: [
+        { nome: { contains: "Roseli" } },
+        { nome: { contains: "Luana" } },
+        { nome: { contains: "André" } },
+        { nome: { contains: "Andre" } },
+        { imoviewCodigo: { in: ["11", "17", "19"] } },
+        { telefone: { in: ["5513974103368", "5513981404451", "5513996960556"] } },
+      ],
+    },
+    data: { ativo: false },
+  });
+
+  await prisma.user.updateMany({
+    where: {
+      OR: [
+        { name: { contains: "Roseli" } },
+        { name: { contains: "Luana" } },
+        { name: { contains: "André" } },
+        { name: { contains: "Andre" } },
+        { email: { contains: "roseli" } },
+        { email: { contains: "luana" } },
+        { email: { contains: "andre" } },
+        { phone: { in: ["13974103368", "13981404451", "13996960556", "5513974103368", "5513981404451", "5513996960556"] } },
+      ],
+    },
+    data: { isActive: false },
+  });
+
+  console.log(`✅ Concluído! Total ativos oficiais: ${OFFICIAL_RHEMA_BROKERS.length} (Revogados: Roseli, Luana, André desativados)`);
 }
 
 main()
