@@ -18,10 +18,14 @@ export class ChatService {
         search?: string
     ) {
         // 1. Get latest message per remoteJid with cursor pagination
-        // Uses m1.timestamp < before (when provided) to load older chats
-        // Build params: [dbSessionId, dbSessionId, (before?), limit]
-        const qParams: any[] = [dbSessionId, dbSessionId];
-        if (before) qParams.push(new Date(before));
+        // Uses DISTINCT ON ("remoteJid") for sub-millisecond index lookup on PostgreSQL
+        const qParams: any[] = [dbSessionId];
+        let paramIdx = 2;
+        let beforeClause = '';
+        if (before) {
+            beforeClause = `AND "timestamp" < $${paramIdx++}`;
+            qParams.push(new Date(before));
+        }
         qParams.push(limit);
 
         const rawLastMessages = await prisma.$queryRawUnsafe<Array<{
@@ -31,22 +35,19 @@ export class ChatService {
             type: string;
             fromMe: boolean;
         }>>(`
-            SELECT m1.remoteJid, m1.content, m1.timestamp, m1.type, m1.fromMe
-            FROM \`Message\` m1
-            INNER JOIN (
-                SELECT remoteJid, MAX(timestamp) as max_ts
-                FROM \`Message\`
-                WHERE sessionId = ? 
-                  AND remoteJid NOT LIKE '%@broadcast'
-                  AND remoteJid != 'status@broadcast'
-                GROUP BY remoteJid
-            ) m2 ON m1.remoteJid = m2.remoteJid AND m1.timestamp = m2.max_ts
-            WHERE m1.sessionId = ?
-              AND m1.remoteJid NOT LIKE '%@broadcast'
-              AND m1.remoteJid != 'status@broadcast'
-            ${before ? 'AND m1.timestamp < ?' : ''}
-            ORDER BY m1.timestamp DESC
-            LIMIT ?
+            SELECT "remoteJid", "content", "timestamp", "type", "fromMe"
+            FROM (
+                SELECT DISTINCT ON ("remoteJid")
+                    "remoteJid", "content", "timestamp", "type", "fromMe"
+                FROM "Message"
+                WHERE "sessionId" = $1
+                  AND "remoteJid" NOT LIKE '%@broadcast'
+                  AND "remoteJid" != 'status@broadcast'
+                  ${beforeClause}
+                ORDER BY "remoteJid", "timestamp" DESC
+            ) sub
+            ORDER BY "timestamp" DESC
+            LIMIT $${paramIdx}
         `, ...qParams);
 
         // Fast return if no messages
