@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Se a tabela estiver vazia ou com corretores incompletos, semeia os corretores oficiais ativos automaticamente
-    if (brokers.length < 7 && !q) {
+    if (brokers.length < 9 && !q) {
       await seedOfficialBrokers();
       brokers = await prisma.brokerContact.findMany({
         where: whereClause,

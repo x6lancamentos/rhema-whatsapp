@@ -1,4 +1,5 @@
 const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
@@ -43,6 +44,20 @@ const OFFICIAL_RHEMA_BROKERS = [
     imoviewCodigo: "25",
     telefone: "5513988181515",
     email: "ulisses@rhemaimobiliaria.com.br",
+    equipe: "Vendas",
+  },
+  {
+    nomeOficial: "André Felipe O. Cavalcante",
+    imoviewCodigo: "24",
+    telefone: "5513981404451",
+    email: "andre@rhemaimobiliaria.com.br",
+    equipe: "Vendas",
+  },
+  {
+    nomeOficial: "Georjana Garcia Gonçalves",
+    imoviewCodigo: "28",
+    telefone: "5512991797436",
+    email: "georjana@rhemaimobiliaria.com.br",
     equipe: "Vendas",
   },
   {
@@ -96,18 +111,66 @@ async function main() {
       console.log(`  + Criado: ${b.nomeOficial} (${b.telefone})`);
       count++;
     }
+
+    // Cria/Atualiza usuário de Login no Painel Web (Senha: Nome@2026!)
+    const firstName = b.nomeOficial.split(" ")[0];
+    const cleanFirstName = firstName.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const passwordRaw = `${cleanFirstName}@2026!`;
+    const hashedPassword = await bcrypt.hash(passwordRaw, 10);
+    const cleanPhone = b.telefone.replace(/^55/, "");
+
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: b.email },
+          { phone: cleanPhone },
+          { phone: b.telefone },
+          { imoviewCorretorCodigo: b.imoviewCodigo },
+        ],
+      },
+    });
+
+    if (existingUser) {
+      await prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          name: b.nomeOficial,
+          email: b.email || existingUser.email,
+          phone: cleanPhone,
+          password: hashedPassword,
+          role: "CORRETOR",
+          imoviewCorretorCodigo: b.imoviewCodigo,
+          imoviewCorretorNome: b.nomeOficial,
+          isActive: true,
+        },
+      });
+      console.log(`  🔑 Login atualizado: ${cleanPhone} / ${b.email} (Senha: ${passwordRaw})`);
+    } else if (b.email) {
+      await prisma.user.create({
+        data: {
+          name: b.nomeOficial,
+          email: b.email,
+          phone: cleanPhone,
+          password: hashedPassword,
+          role: "CORRETOR",
+          imoviewCorretorCodigo: b.imoviewCodigo,
+          imoviewCorretorNome: b.nomeOficial,
+          isActive: true,
+        },
+      });
+      console.log(`  🔑 Novo login criado: ${cleanPhone} / ${b.email} (Senha: ${passwordRaw})`);
+    }
   }
 
-  // Desativa explicitamente os corretores revogados pela diretoria (Roseli, Luana, André)
+  // Desativa explicitamente os corretores revogados pela diretoria (Roseli, Luana, André Szwarcberg)
   await prisma.brokerContact.updateMany({
     where: {
       OR: [
         { nome: { contains: "Roseli" } },
         { nome: { contains: "Luana" } },
-        { nome: { contains: "André" } },
-        { nome: { contains: "Andre" } },
-        { imoviewCodigo: { in: ["11", "17", "19"] } },
-        { telefone: { in: ["5513974103368", "5513981404451", "5513996960556"] } },
+        { nome: { contains: "Szwarcberg" } },
+        { imoviewCodigo: { in: ["11", "19"] } },
+        { telefone: { in: ["5513974103368", "5513996960556"] } },
       ],
     },
     data: { ativo: false },
@@ -118,18 +181,16 @@ async function main() {
       OR: [
         { name: { contains: "Roseli" } },
         { name: { contains: "Luana" } },
-        { name: { contains: "André" } },
-        { name: { contains: "Andre" } },
+        { name: { contains: "Szwarcberg" } },
         { email: { contains: "roseli" } },
         { email: { contains: "luana" } },
-        { email: { contains: "andre" } },
-        { phone: { in: ["13974103368", "13981404451", "13996960556", "5513974103368", "5513981404451", "5513996960556"] } },
+        { phone: { in: ["13974103368", "13996960556", "5513974103368", "5513996960556"] } },
       ],
     },
     data: { isActive: false },
   });
 
-  console.log(`✅ Concluído! Total ativos oficiais: ${OFFICIAL_RHEMA_BROKERS.length} (Revogados: Roseli, Luana, André desativados)`);
+  console.log(`✅ Concluído! Total ativos oficiais: ${OFFICIAL_RHEMA_BROKERS.length} (Revogados: Roseli, Luana, André Szwarcberg desativados)`);
 }
 
 main()
