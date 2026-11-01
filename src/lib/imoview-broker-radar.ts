@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { getImoviewConfig, parseBrDate, formatarMoeda, ImoviewBroker } from "@/lib/imoview";
+import { lookupBrokerPhone } from "@/lib/rhema-brokers";
 
 export interface RadarProperty {
   codigo: string;
@@ -76,6 +77,7 @@ export interface RadarMatch {
   lead: RadarLead;
   corretorNome: string;
   corretorCodigo: string;
+  corretorTelefone?: string;
 }
 
 export interface BrokerCadenceItem {
@@ -645,14 +647,19 @@ export function computeStockLeadMatches(
 
       // Apenas registrar matches de alta precisão (>= 70% de afinidade)
       if (finalScore >= 70) {
+        const cNome = lead.corretorNome || "Corretor Rhema";
+        const cCodigo = lead.corretorCodigo || "";
+        const cTelefone = lookupBrokerPhone(cNome, cCodigo);
+
         matches.push({
           id: `${property.codigo}-${lead.atendimentoId}`,
           score: finalScore,
           reasons,
           property,
           lead,
-          corretorNome: lead.corretorNome || "Corretor Rhema",
-          corretorCodigo: lead.corretorCodigo || "",
+          corretorNome: cNome,
+          corretorCodigo: cCodigo,
+          corretorTelefone: cTelefone || undefined,
         });
       }
     }
@@ -725,7 +732,7 @@ export async function fetchBrokerCadenceData(options?: { forceRefresh?: boolean 
               brokerMap.set(bCodigo, {
                 corretorCodigo: bCodigo,
                 corretorNome: bNome,
-                corretorTelefone: brokerPhones.get(bCodigo) || brokerPhones.get(bNome.toLowerCase()) || undefined,
+                corretorTelefone: brokerPhones.get(bCodigo) || brokerPhones.get(bNome.toLowerCase()) || lookupBrokerPhone(bNome, bCodigo) || undefined,
                 atendimentosAtivos: 0,
                 atividadesVencidas: 0,
                 atividadesHoje: 0,
@@ -785,7 +792,7 @@ export async function fetchBrokerCadenceData(options?: { forceRefresh?: boolean 
         brokerMap.set(bCodigo, {
           corretorCodigo: bCodigo,
           corretorNome: bNome,
-          corretorTelefone: brokerPhones.get(bCodigo) || brokerPhones.get(bNome.toLowerCase()) || undefined,
+          corretorTelefone: brokerPhones.get(bCodigo) || brokerPhones.get(bNome.toLowerCase()) || lookupBrokerPhone(bNome, bCodigo) || undefined,
           atendimentosAtivos: 0,
           atividadesVencidas: 0,
           atividadesHoje: 0,

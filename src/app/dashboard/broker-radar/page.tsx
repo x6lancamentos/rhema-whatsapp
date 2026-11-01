@@ -101,6 +101,7 @@ interface RadarMatch {
   lead: RadarLead;
   corretorNome: string;
   corretorCodigo: string;
+  corretorTelefone?: string;
 }
 
 interface BrokerCadenceItem {
@@ -304,6 +305,83 @@ export default function BrokerRadarPage() {
     }
   }, [activeTab, cadenceList.length, loadingCadence, loadCadence]);
 
+  // Dicionário canônico de fallback dos corretores oficiais da Rhema Imóveis
+  const RHEMA_PHONE_FALLBACKS: Record<string, string> = useMemo(
+    () => ({
+      // Elaine
+      "14": "5513976008877",
+      "elaine": "5513976008877",
+      "elaine do nascimento": "5513976008877",
+      "elaine nascimento": "5513976008877",
+
+      // Flávia
+      "18": "5515974042000",
+      "flavia": "5515974042000",
+      "flávia": "5515974042000",
+      "flavia mara": "5515974042000",
+      "flávia mara": "5515974042000",
+      "flavia mara de mattos": "5515974042000",
+      "flávia mara de mattos": "5515974042000",
+      "flavia mattos": "5515974042000",
+      "flávia mattos": "5515974042000",
+
+      // Tatiana
+      "13": "5513981854677",
+      "tatiana": "5513981854677",
+      "tati": "5513981854677",
+      "tatiana goncalves de oliveira": "5513981854677",
+      "tatiana gonçalves de oliveira": "5513981854677",
+      "tatiana oliveira": "5513981854677",
+
+      // Andressa
+      "21": "5513981512755",
+      "andressa": "5513981512755",
+      "andressa larocca": "5513981512755",
+      "andressa larocca orlandi pereira": "5513981512755",
+
+      // Leniára
+      "12": "5513996461664",
+      "leniara": "5513996461664",
+      "leniára": "5513996461664",
+      "leniara araujo": "5513996461664",
+      "leniára araújo": "5513996461664",
+      "leniara r. m. araujo": "5513996461664",
+      "leniára r. m. araújo": "5513996461664",
+
+      // Roseli
+      "11": "5513974103368",
+      "roseli": "5513974103368",
+      "roseli lopes": "5513974103368",
+      "roseli de carvalho lopes": "5513974103368",
+
+      // André
+      "17": "5513981404451",
+      "andre": "5513981404451",
+      "andré": "5513981404451",
+      "andre felipe": "5513981404451",
+      "andré felipe": "5513981404451",
+      "andre felipe o. cavalcante": "5513981404451",
+      "andré felipe o. cavalcante": "5513981404451",
+
+      // Ulisses
+      "25": "5513988181515",
+      "ulisses": "5513988181515",
+      "ulisses dias vieira": "5513988181515",
+
+      // Kaylane
+      "16": "5513992123879",
+      "kaylane": "5513992123879",
+      "kaylane assumpcao": "5513992123879",
+      "kaylane assumpção": "5513992123879",
+
+      // Luana
+      "19": "5513996960556",
+      "luana": "5513996960556",
+      "luana cardoso": "5513996960556",
+    }),
+    []
+  );
+
   // Mapa de telefones de corretores cadastrados para lookup rápido
   const brokerPhoneMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -316,19 +394,41 @@ export default function BrokerRadarPage() {
     return map;
   }, [brokerContacts]);
 
-  // Resolver telefone do corretor
+  // Resolver telefone do corretor com tolerância inteligente
   const getBrokerPhone = useCallback(
-    (corretorNome: string, corretorCodigo?: string) => {
+    (corretorNome: string, corretorCodigo?: string, fallbackDirect?: string) => {
+      if (fallbackDirect) return fallbackDirect;
+
       if (corretorCodigo && brokerPhoneMap.has(corretorCodigo)) {
         return brokerPhoneMap.get(corretorCodigo)!;
       }
+      if (corretorCodigo && RHEMA_PHONE_FALLBACKS[corretorCodigo]) {
+        return RHEMA_PHONE_FALLBACKS[corretorCodigo];
+      }
+
       const lower = corretorNome.toLowerCase().trim();
       if (brokerPhoneMap.has(lower)) {
         return brokerPhoneMap.get(lower)!;
       }
+      if (RHEMA_PHONE_FALLBACKS[lower]) {
+        return RHEMA_PHONE_FALLBACKS[lower];
+      }
+
+      // Busca fuzzy por substring (ex: "Flávia Mara de Mattos" contém "flavia")
+      for (const [key, phone] of brokerPhoneMap.entries()) {
+        if (key.length >= 4 && (lower.includes(key) || key.includes(lower))) {
+          return phone;
+        }
+      }
+      for (const [key, phone] of Object.entries(RHEMA_PHONE_FALLBACKS)) {
+        if (key.length >= 4 && (lower.includes(key) || key.includes(lower))) {
+          return phone;
+        }
+      }
+
       return "";
     },
-    [brokerPhoneMap]
+    [brokerPhoneMap, RHEMA_PHONE_FALLBACKS]
   );
 
   // Lista única de corretores presentes nos matches
@@ -377,7 +477,7 @@ export default function BrokerRadarPage() {
 
   // Abertura do modal de envio de Match individual
   const handleOpenDispatchMatch = (match: RadarMatch) => {
-    const phone = getBrokerPhone(match.corretorNome, match.corretorCodigo);
+    const phone = getBrokerPhone(match.corretorNome, match.corretorCodigo, match.corretorTelefone);
     setDispatchTargetBroker({
       nome: match.corretorNome,
       telefone: phone,
@@ -855,7 +955,7 @@ export default function BrokerRadarPage() {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {filteredMatches.map((match) => {
-                const brokerPhone = getBrokerPhone(match.corretorNome, match.corretorCodigo);
+                const brokerPhone = getBrokerPhone(match.corretorNome, match.corretorCodigo, match.corretorTelefone);
 
                 return (
                   <Card
@@ -964,7 +1064,7 @@ export default function BrokerRadarPage() {
                               </p>
                             )}
                             <p className="text-[11px] truncate italic text-muted-foreground/90">
-                              "{match.lead.ultimoHistorico}"
+                              "{match.lead.ultimoHistorico ? match.lead.ultimoHistorico.replace(/<[^>]*>/g, '').trim() : ''}"
                             </p>
                           </div>
                         </div>

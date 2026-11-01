@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser, isAdmin, canUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { seedOfficialBrokers } from "@/lib/rhema-brokers";
 import { z } from "zod";
 
 const brokerContactSchema = z.object({
@@ -47,10 +48,19 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const brokers = await prisma.brokerContact.findMany({
+    let brokers = await prisma.brokerContact.findMany({
       where: whereClause,
       orderBy: [{ ativo: "desc" }, { nome: "asc" }],
     });
+
+    // Se a tabela estiver vazia ou com corretores incompletos, semeia os 10 corretores oficiais automaticamente
+    if (brokers.length < 10 && !q) {
+      await seedOfficialBrokers();
+      brokers = await prisma.brokerContact.findMany({
+        where: whereClause,
+        orderBy: [{ ativo: "desc" }, { nome: "asc" }],
+      });
+    }
 
     return NextResponse.json({
       status: true,
