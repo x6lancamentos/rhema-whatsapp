@@ -380,49 +380,104 @@ async function handleOwnerTurn(params: { sock: any; conv: any; sdrLead: any; tex
   });
 
   const parsed = result.jsonParsed || {};
-  const replyText = parsed.replyText || "Muito obrigado pelas informações! Já anotei aqui com a equipe.";
+  const replyParts: string[] = Array.isArray(parsed.replyParts) && parsed.replyParts.length > 0
+    ? parsed.replyParts
+    : [parsed.replyText || "Muito obrigado pelas informações! Já anotei aqui com a nossa equipe."];
   const ownerStatus = parsed.ownerStatus || "WINDOWS_OK";
   const janelas = parsed.janelasDisponiveis || [];
+  const alteracoes = parsed.alteracoesCadastrais || {};
 
-  // Atualiza estado do proprietário no lead
+  // Atualiza estado do proprietário e snapshot de valores no lead
   await prisma.sdrLead.update({
     where: { id: sdrLead.id },
     data: {
       ownerStatus,
       ownerWindows: janelas,
+      imovelSnapshot: alteracoes.novoValorVenda
+        ? {
+            ...(typeof sdrLead.imovelSnapshot === "object" && sdrLead.imovelSnapshot !== null ? sdrLead.imovelSnapshot : {}),
+            valorVendaAtualizado: alteracoes.novoValorVenda,
+            condominioAtualizado: alteracoes.novoCondominio,
+            iptuAtualizado: alteracoes.novoIptu,
+          }
+        : undefined,
     },
   });
 
-  await sock.sendMessage(conv.jid, { text: replyText });
-  await prisma.sdrMessage.create({
-    data: {
-      conversationId: conv.id,
-      direction: "OUT",
-      content: replyText,
-      modelUsed: result.modelUsed,
-    },
+  // Envia resposta em bolhas naturais para o proprietário
+  await sendHumanBubblesWithTyping({
+    sock,
+    toJid: conv.jid,
+    bubbles: replyParts,
+    conversationId: conv.id,
+    modelUsed: result.modelUsed,
   });
 
-  // Se o proprietário informou janelas e o lead já estava esperando visita, propõe os horários ao lead
+  // 1. Variável WINDOWS_OK: Proprietário informou janelas -> propõe horários ao lead
   if (ownerStatus === "WINDOWS_OK" && janelas.length > 0) {
     const leadConv = await prisma.sdrConversation.findFirst({
       where: { sdrLeadId: sdrLead.id, role: "LEAD", status: "ACTIVE" },
     });
 
     if (leadConv) {
-      const msgJanelasLead =
-        `Ótima notícia! Acabei de alinhar com o proprietário do imóvel cód. ${sdrLead.codigoImovel || ""} e ele disponibilizou as seguintes janelas para visita:\n\n` +
-        `• ${janelas.slice(0, 2).join("\n• ")}\n\n` +
-        `Qual dessas opções fica melhor para a sua agenda?`;
+      const bubble1 = `Ótima notícia! Acabei de alinhar com o proprietário do imóvel cód. ${sdrLead.codigoImovel || ""}.`;
+      const bubble2 = `Ele disponibilizou as seguintes janelas:\n• ${janelas.slice(0, 2).join("\n• ")}\n\nQual dessas fica melhor para a sua agenda?`;
 
       await sleep(1500);
-      await sock.sendMessage(leadConv.jid, { text: msgJanelasLead });
-      await prisma.sdrMessage.create({
+      await sendHumanBubblesWithTyping({
+        sock,
+        toJid: leadConv.jid,
+        bubbles: [bubble1, bubble2],
+        conversationId: leadConv.id,
+        modelUsed: "owner-windows-sync",
+      });
+    }
+  }
+
+  // 2. Variável SOLD / UNAVAILABLE / RENTED: Contingência Comercial (Regra 6)
+  if (["SOLD", "UNAVAILABLE", "RENTED"].includes(ownerStatus)) {
+    const leadConv = await prisma.sdrConversation.findFirst({
+      where: { sdrLeadId: sdrLead.id, role: "LEAD", status: "ACTIVE" },
+    });
+
+    if (leadConv) {
+      const { findMatchingAlternativeProperties } = await import("./property-matcher");
+      const snap = (sdrLead.imovelSnapshot as any) || {};
+      const alternativas = await findMatchingAlternativeProperties({
+        imovelOrigemCodigo: sdrLead.codigoImovel,
+        bairro: snap.bairro,
+        tipoImovel: snap.tipo,
+        valorNumerico: snap.valor,
+        quartosMin: snap.quartos,
+        limite: 3,
+      });
+
+      const motivoTexto = ownerStatus === "SOLD" ? "acabou de ser vendido" : "foi retirado de venda temporariamente pelo proprietário";
+      const bubble1 = `Oi ${sdrLead.leadNome}! Falei agora com o proprietário desse imóvel (cód. ${sdrLead.codigoImovel || ""}) e ele nos informou que o imóvel ${motivoTexto}.`;
+      
+      let bubble2 = "";
+      if (alternativas.length > 0) {
+        const links = alternativas.map((a) => `• ${a.titulo} no ${a.bairro} (${a.valorFormatado})\n  👉 ${a.linkRhema}`).join("\n\n");
+        bubble2 = `Mas como já entendi o seu perfil, separei aqui ${alternativas.length} excelentes opções na mesma região:\n\n${links}\n\nQual dessas plantas te agrada mais?`;
+      } else {
+        bubble2 = `Mas como já entendi o seu perfil, estou buscando opções exclusivas semelhantes aqui no bairro. Me dá 1 minutinho que já te mando!`;
+      }
+
+      await sleep(2000);
+      await sendHumanBubblesWithTyping({
+        sock,
+        toJid: leadConv.jid,
+        bubbles: [bubble1, bubble2],
+        conversationId: leadConv.id,
+        modelUsed: "owner-contingency-sync",
+      });
+
+      // Atualiza o lead no CRM para registrar as alternativas
+      await prisma.sdrLead.update({
+        where: { id: sdrLead.id },
         data: {
-          conversationId: leadConv.id,
-          direction: "OUT",
-          content: msgJanelasLead,
-          modelUsed: "owner-windows-sync",
+          status: "QUALIFYING",
+          alternativasEnviadas: alternativas.map((a) => a.codigo),
         },
       });
     }
