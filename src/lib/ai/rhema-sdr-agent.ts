@@ -60,11 +60,10 @@ Responda SEMPRE em JSON válido com as chaves:
   "prontoParaPreVisitaMeet": boolean
 }`;
 
+import { callModelRouter } from "./model-router";
+
 /**
- * Roteador Multi-Modelos Gratuitos (Custo R$ 0,00)
- * 1º Groq Cloud (llama-3.3-70b-versatile) -> Latência < 0.7s para WhatsApp
- * 2º OpenRouter Nvidia Nemotron (nvidia/nemotron-3-super-120b-a12b:free) -> Raciocínio estratégico 120B gratuito
- * 3º OpenRouter Qwen 3 / DeepSeek R1 / Gemini Flash Free -> Fallback gratuito
+ * Roteador Multi-Modelos Gratuitos (Custo R$ 0,00) via ModelRouter
  */
 export async function callFreeAiRouter(params: {
   systemPrompt: string;
@@ -72,86 +71,19 @@ export async function callFreeAiRouter(params: {
   preferModel?: "nvidia-nemotron" | "groq-fast" | "auto";
   jsonMode?: boolean;
 }): Promise<{ content: string; modelUsed: string }> {
-  const groqKey = process.env.GROQ_API_KEY || "";
-  const openRouterKey = process.env.OPENROUTER_API_KEY || "";
+  const result = await callModelRouter({
+    task: "LEAD_CHAT",
+    messages: [
+      { role: "system", content: params.systemPrompt },
+      { role: "user", content: params.userPrompt },
+    ],
+    jsonMode: params.jsonMode,
+  });
 
-  const tryOpenRouter = async (modelId: string) => {
-    if (!openRouterKey) throw new Error("OPENROUTER_API_KEY não configurada");
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openRouterKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://rhemaimoveis.com.br",
-        "X-Title": "Rhema OS v5 Suite Autonoma",
-      },
-      body: JSON.stringify({
-        model: modelId,
-        temperature: 0.3,
-        ...(params.jsonMode ? { response_format: { type: "json_object" } } : {}),
-        messages: [
-          { role: "system", content: params.systemPrompt },
-          { role: "user", content: params.userPrompt },
-        ],
-      }),
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!res.ok) throw new Error(`OpenRouter ${modelId} status ${res.status}`);
-    const data = await res.json();
-    const text = data.choices?.[0]?.message?.content;
-    if (!text) throw new Error("Resposta vazia do OpenRouter");
-    return { content: text, modelUsed: modelId };
+  return {
+    content: result.content,
+    modelUsed: result.modelUsed,
   };
-
-  const tryGroq = async () => {
-    if (!groqKey) throw new Error("GROQ_API_KEY não configurada");
-    const modelId = "llama-3.3-70b-versatile";
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${groqKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: modelId,
-        temperature: 0.3,
-        ...(params.jsonMode ? { response_format: { type: "json_object" } } : {}),
-        messages: [
-          { role: "system", content: params.systemPrompt },
-          { role: "user", content: params.userPrompt },
-        ],
-      }),
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!res.ok) throw new Error(`Groq status ${res.status}`);
-    const data = await res.json();
-    const text = data.choices?.[0]?.message?.content;
-    if (!text) throw new Error("Resposta vazia da Groq");
-    return { content: text, modelUsed: `groq/${modelId}` };
-  };
-
-  const chain =
-    params.preferModel === "nvidia-nemotron"
-      ? [
-          () => tryOpenRouter("nvidia/nemotron-3-super-120b-a12b:free"),
-          () => tryGroq(),
-          () => tryOpenRouter("google/gemini-2.0-flash-exp:free"),
-        ]
-      : [
-          () => tryGroq(),
-          () => tryOpenRouter("nvidia/nemotron-3-super-120b-a12b:free"),
-          () => tryOpenRouter("google/gemini-2.0-flash-exp:free"),
-        ];
-
-  for (const runner of chain) {
-    try {
-      return await runner();
-    } catch {
-      // Passa automaticamente para o próximo modelo gratuito
-    }
-  }
-
-  throw new Error("Nenhum provedor gratuito respondeu a tempo.");
 }
 
 /**

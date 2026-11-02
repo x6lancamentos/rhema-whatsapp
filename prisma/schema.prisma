@@ -644,4 +644,112 @@ model BrokerContact {
   @@index([ativo])
 }
 
+// ==========================================
+// MÓDULO RHEMA SDR AUTÔNOMO (QUALIFICAÇÃO + VISITA)
+// ==========================================
+
+model SdrLead {
+  id                   String            @id @default(cuid())
+  status               String            @default("NEW") // NEW, CONTACTED, QUALIFYING, AWAITING_OWNER, SCHEDULING, VISIT_CONFIRMED, CRM_REGISTERED, HANDED_OFF, NURTURE, NO_RESPONSE, HUMAN_TAKEOVER, OPTED_OUT
+  leadNome             String
+  leadPhone            String
+  leadJid              String
+  origem               String?           // ZAP, VivaReal, Instagram, Site, Indicação, etc.
+  codigoImovel         String?
+  imovelSnapshot       Json?             // { valor, bairro, tipo, quartos, condomínio, iptu, etc. }
+  observacoesCamila    String?           @db.Text
+  rawIntakeText        String            @db.Text
+  intakeMessageId      String?           @unique // Idempotência contra reenvio da mesma mensagem no grupo
+  pilares              Json?             // { finalidadeCompra: bool, aderenciaLocalizacao: bool, momentoCompraPrazo: bool, condicaoFinanceira: bool }
+  temperatura          String?           @default("MORNO") // QUENTE, MORNO, FRIO
+  perfilExtraido       Json?             // { tipo, bairros, valorMax, quartosMin, etc. }
+  alternativasEnviadas Json?             // Lista de códigos de imóveis alternativos ofertados
+  ownerPhone           String?
+  ownerStatus          String?           @default("PENDING") // PENDING, WINDOWS_OK, UNAVAILABLE, SOLD, NO_REPLY
+  ownerWindows         Json?             // Janelas disponíveis informadas pelo proprietário
+  visitaDataHora       DateTime?
+  visitaImovel         String?
+  imoviewAtendimento   Int?
+  corretorId           Int?
+  corretorNome         String?
+  criterioDistribuicao String?           // FILA, MERITOCRACIA, CAPTADOR, TITULAR_EXISTENTE
+  followupCount        Int               @default(0)
+  nextFollowupAt       DateTime?
+  sessionId            String            @default("5mhrx9")
+  supervised           Boolean           @default(false)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  conversations        SdrConversation[]
+  learningInsights     SdrLearningInsight[]
+
+  @@index([leadPhone])
+  @@index([status])
+  @@index([nextFollowupAt])
+  @@index([createdAt])
+}
+
+model SdrConversation {
+  id        String       @id @default(cuid())
+  sdrLeadId String
+  role      String       // LEAD, OWNER
+  jid       String
+  phone     String
+  status    String       @default("ACTIVE") // ACTIVE, HUMAN_TAKEOVER, OPTED_OUT, CLOSED
+  summary   String?      @db.Text
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  sdrLead   SdrLead      @relation(fields: [sdrLeadId], references: [id], onDelete: Cascade)
+  messages  SdrMessage[]
+
+  @@index([jid, status])
+  @@index([phone])
+}
+
+model SdrMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  direction      String          // IN, OUT
+  content        String          @db.Text
+  modelUsed      String?
+  createdAt      DateTime        @default(now())
+
+  conversation   SdrConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model AiModelStat {
+  id        String   @id @default(cuid())
+  task      String   // LEAD_CHAT, OWNER_CHAT, EXTRACTION, STRATEGY, LEARNING
+  model     String
+  success   Boolean
+  jsonValid Boolean?
+  latencyMs Int
+  errorCode String?
+  createdAt DateTime @default(now())
+
+  @@index([task, model, createdAt])
+}
+
+model SdrLearningInsight {
+  id                 String    @id @default(cuid())
+  sdrLeadId          String?
+  tipo               String    // OBJECAO, PADRAO_CONVERSAO, SUCESSO_VISITA, DESISTENCIA_PROPRIETARIO, SUGESTAO_FLUXO
+  titulo             String
+  diagnostico        String    @db.Text
+  sugestaoAcao       String    @db.Text
+  notificadoGrupoSdr Boolean   @default(false)
+  notificadoEm       DateTime?
+  createdAt          DateTime  @default(now())
+
+  sdrLead            SdrLead?  @relation(fields: [sdrLeadId], references: [id], onDelete: SetNull)
+
+  @@index([tipo])
+  @@index([notificadoGrupoSdr])
+  @@index([createdAt])
+}
+
+
 

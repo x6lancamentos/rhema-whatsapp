@@ -4,6 +4,7 @@ import { downloadMediaMessage, normalizeMessageContent } from "@whiskeysockets/b
 import { logger } from "@/lib/logger";
 import { getAiAgentConfig, processOwnerMessage } from "@/lib/ai/agent-service";
 import { processRhemaVoiceOrText } from "@/lib/ai/rhema-voice-copilot";
+import { handleGroupIntakeMessage, handleInboundSdrMessage } from "@/lib/ai/sdr/sdr-orchestrator";
 import {
     resolveWhatsappRole,
     isManagerCommandText,
@@ -258,11 +259,12 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
                 continue;
             }
 
+            const cleanSenderDigits = senderJid.replace(/@.*$/, "").replace(/\D/g, "");
+
             // ==========================================
             // BLINDAGEM RBAC & DIRETORIA AGÊNTICA RHEMA OS (Gestor Comandante vs. Corretor vs. Cliente)
             // ==========================================
             try {
-                const cleanSenderDigits = senderJid.replace(/@.*$/, "").replace(/\D/g, "");
                 const isBrunno =
                     cleanSenderDigits.includes("556293856483") ||
                     cleanSenderDigits.includes("6293856483") ||
@@ -313,6 +315,13 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
                             }
                         }
                     }
+                }
+
+                // 1.1 Processamento de Leads no Grupo Rhema SDR (Camila / Gestor)
+                const sdrGroupJid = process.env.RHEMA_SDR_GROUP_JID || "120363431510652216@g.us";
+                if (isGroup && remoteJid === sdrGroupJid && trimmedText && !trimmedText.startsWith("!") && !fromMe) {
+                    await handleGroupIntakeMessage(sock, msg, trimmedText);
+                    continue;
                 }
 
                 // 2. Pipeline de Voz Fricção Zero (Áudio de Corretor/Gestor ou tags #placar / #fechamento / #parecer / #captacao)
@@ -371,7 +380,44 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
                 logger.error("AutoReply", "Erro no processamento Rhema Commander/Voz:", errRBAC);
             }
 
-            // 3. Se for mensagem comum de cliente/grupo, verifica permissões do Chatbot (AutoReply)
+            // 3. Se for mensagem de áudio de cliente externo com conversa SDR ativa, transcreve com Groq Whisper
+            if (hasAudio && !fromMe && !isGroup) {
+                try {
+                    const sdrConv = await prisma.sdrConversation.findFirst({
+                        where: {
+                            OR: [{ jid: remoteJid }, { phone: cleanSenderDigits }],
+                            status: "ACTIVE",
+                        },
+                    });
+
+                    if (sdrConv) {
+                        const buffer = (await downloadMediaMessage(msg as any, "buffer", {})) as Buffer;
+                        const { transcribeAudioWithGroq } = await import("@/lib/ai/groq-whisper-client");
+                        const audioMime = content?.audioMessage?.mimetype || "audio/ogg";
+                        const stt = await transcribeAudioWithGroq({
+                            audioData: buffer,
+                            mimeType: audioMime,
+                        });
+
+                        if (stt?.text?.trim()) {
+                            logger.info("AutoReply", `Áudio de lead SDR transcrito com sucesso via Groq Whisper (${stt.latencyMs}ms): "${stt.text}"`);
+                            const sdrResult = await handleInboundSdrMessage({
+                                sock,
+                                remoteJid,
+                                cleanPhone: cleanSenderDigits,
+                                text: stt.text.trim(),
+                            });
+                            if (sdrResult.handled) {
+                                continue;
+                            }
+                        }
+                    }
+                } catch (audioSdrErr) {
+                    logger.warn("AutoReply", "Aviso ao processar áudio de lead SDR:", audioSdrErr);
+                }
+            }
+
+            // 4. Se for mensagem comum de cliente/grupo, verifica permissões do Chatbot (AutoReply)
             if (!isBotEnabled || !canAutoReply(config, fromMe, senderJid)) {
                 continue;
             }
@@ -388,6 +434,17 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
                 // A Camila AI só atende conversas privadas (nunca grupos), que não sejam comandos e que não sejam nossas mensagens
                 if (!isGroup && !fromMe && !isCommand) {
                     const cleanPhone = remoteJid.replace(/@.*$/, "").replace(/\D/g, "");
+
+                    // 0. Verifica se este contato pertence a uma conversa SDR ativa (Lead ou Proprietário)
+                    const sdrResult = await handleInboundSdrMessage({
+                        sock,
+                        remoteJid,
+                        cleanPhone,
+                        text: trimmedText,
+                    });
+                    if (sdrResult.handled) {
+                        continue;
+                    }
 
                     // 1. Verifica se este contato pertence a um disparo com Camila AI habilitada
                     const aiBroadcastRecipient = await prisma.broadcastRecipient.findFirst({

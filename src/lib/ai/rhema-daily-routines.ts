@@ -25,23 +25,23 @@ export function setRhemaRoutinesEnabled(enabled: boolean): boolean {
 
 const MENSAGENS_ONBOARDING_CALIBRADAS: Record<string, (nome: string) => string> = {
   andre: () =>
-    `Bom dia, André! 🙏\n\nCom 16 anos de mercado em Santos, você sabe que quem domina a pauta da manhã domina a mesa de fechamento.\n\nPara hoje:\n1. Qual é o atendimento mais estratégico da sua carteira para avançarmos em proposta?\n2. No seu bloco de captação (08h–09h), quais proprietários vamos posicionar na Exclusividade Rhema Premium?\n\nExcelente dia de negócios!`,
+    `Bom dia, André Felipe! 🙏\n\nCada passo no método consolida sua primeira venda na Rhema. Estrutura e disciplina vencem qualquer ansiedade.\n\nPara hoje:\n1. Qual é o cliente mais qualificado da sua esteira para focarmos em agendar visita?\n2. No seu bloco de prospecção, quais 3 contatos vamos trabalhar hoje?\n\nExcelente dia de trabalho e conte com a diretoria! 💪`,
   tatiana: () =>
     `Bom dia, Tatiana! 🦁🔥\n\nQuem tem a sua presença e a sua garra faz o resultado acontecer.\n\nTrês focos de ataque hoje:\n1. Qual é o cliente mais quente para puxarmos proposta ainda hoje?\n2. Qual visita recente precisa daquela sua ligação certeira de fechamento?\n3. Qual imóvel novo vai entrar na sua carteira hoje?\n\nVai com tudo! 🚀`,
   flavia: () =>
     `Bom dia, Flávia! 🎯\n\nDireto nas oportunidades de alto giro de hoje:\n1. Quais visitas estão confirmadas na agenda?\n2. Dos clientes ativos no Imoview, quais 3 têm perfil imediato para agendar visita hoje?\n3. Algum imóvel de oportunidade no Gonzaga ou Embaré para subirmos ficha?\n\nBora converter! ⚡`,
-  roseli: () =>
-    `Bom dia, Roseli! ☀️\n\nSeu volume de atendimentos e sua dedicação diária são referência na equipe. Hoje o foco é transformar esse volume em visita e proposta:\n1. Qual dos seus clientes está mais pronto para ver imóvel hoje?\n2. Qual captação podemos buscar hoje para dar produto certo para sua carteira?\n\nUm passo firme de cada vez! 💪`,
   leniara: () =>
     `Bom dia, Leniára. 💼\n\nTrês pontos para hoje:\n1. Cliente mais quente → qual é o próximo passo concreto?\n2. Captação → quais proprietários entram no recontato hoje?\n3. O que destrava sua meta da semana ainda hoje?\n\nFoco e execução.`,
-  luana: () =>
-    `Bom dia, Luana! 💪\n\nDireto ao ponto para sua agenda render:\n→ Qual é o seu cliente número 1 para avançar hoje?\n→ O que falta para virar proposta?\n→ Quantos resgates do Imoview você vai atacar no bloco da manhã?\n\nOrganiza a fila e vai!`,
   elaine: () =>
     `Bom dia, Elaine! 📋\n\nVamos estruturar as prioridades de hoje para sua carteira girar com segurança:\n1. Quais atendimentos do Imoview precisam de follow-up de retorno hoje?\n2. Alguma visita dos últimos dias aguardando evolução para proposta?\n3. Qual horário você reservou hoje para atualização e captação?\n\nConte comigo!`,
   kaylane: () =>
     `Bom dia, Kaylane! 🌱\n\nHoje é mais um dia para ganhar repertório e confiança passo a passo:\n1. Qual cliente ou imóvel você quer estudar mais a fundo hoje?\n2. Em qual etapa do atendimento posso te ajudar a ficar mais segura?\n3. Qual será sua meta de ligações e atualizações no Placar hoje?\n\nBom trabalho! ☀️`,
   andressa: () =>
     `Bom dia, Andressa! 🚀\n\nRitmo forte para ganhar tração rápida na carteira:\n1. Quais novas oportunidades de captação você mapeou para hoje?\n2. Dos leads em atendimento, quem conseguimos puxar para visita ainda nesta semana?\n3. Bora buscar o bônus de Dia Consistente (+20 pts) no Placar hoje?`,
+  ulisses: () =>
+    `Bom dia, Ulisses! 🤝\n\nFoco nas oportunidades sólidas e na esteira de resgate:\n1. Quais atendimentos estratégicos da sua carteira estão prontos para avançar para proposta?\n2. Dos clientes ativos, quais têm visita programada para hoje?\n3. Alguma oportunidade de captação exclusiva para alinharmos?\n\nExcelente dia de negócios!`,
+  georjana: () =>
+    `Bom dia, Georjana! 🌸\n\nOrganização, consistência e relacionamento geram grandes resultados:\n1. Quais clientes ativos no Imoview estão no seu radar prioritário de hoje?\n2. Quais proprietários entram na pauta de captação nos bairros core?\n3. Como posso te apoiar para destravar sua agenda hoje?\n\nConte comigo e ótimo dia! ✨`,
 };
 
 function norm(s: string): string {
@@ -140,9 +140,9 @@ export function gerarDossiePdiOkrSexta1700(): string {
 
 📚 *DIAGNÓSTICO DAS 4 TAXAS PARA AS 1:1 DE SEGUNDA-FEIRA*
 • *Foco Cap. 08 (Qualificação — Ligação → Visita <40%):* Kaylane, Elaine
-• *Foco Cap. 09 (Captação & Exclusividade):* Andressa, Roseli
-• *Foco Cap. 10 (Condução de Visita → Proposta <25%):* Flávia, Luana, Leniára
-• *Foco Cap. 11 (Fechamento & Quebra de Objeções):* Tatiana, André
+• *Foco Cap. 09 (Captação & Exclusividade):* Andressa, Georjana
+• *Foco Cap. 10 (Condução de Visita → Proposta <25%):* Flávia, Leniára, Ulisses
+• *Foco Cap. 11 (Fechamento & Quebra de Objeções):* Tatiana, André Felipe
 
 💡 *Ação Rápida:* Responda *PDI [Nome]* aqui no WhatsApp para receber a pauta individual pronta para a reunião 1:1 ou acesse */admin/pdi* no Hub!
 ─────────────────────────────────────`;
@@ -182,7 +182,7 @@ export async function executarRotinaDiariaRhema(options: {
     const texto = gerarBriefingMatinalGestor();
     mensagensGeradas.push({
       destinatario: "Brunno Anastácio (Gestor)",
-      telefone: gestorPhone || process.env.RHEMA_GESTOR_PHONE || "",
+      telefone: gestorPhone || process.env.RHEMA_GESTOR_PERSONAL_PHONE || process.env.RHEMA_GESTOR_PHONE || "556293856483",
       texto,
       enviado: false,
     });
@@ -191,15 +191,15 @@ export async function executarRotinaDiariaRhema(options: {
       corretores.length > 0
         ? corretores
         : [
-            { nome: "André de Oliveira Szwarcberg", telefone: "" },
-            { nome: "Tatiana Gonçalves de Oliveira", telefone: "" },
-            { nome: "Flávia Mara de Mattos", telefone: "" },
-            { nome: "Roseli de Carvalho Lopes", telefone: "" },
-            { nome: "Leniára R. M. Araújo", telefone: "" },
-            { nome: "Luana Cardoso", telefone: "" },
-            { nome: "Elaine do Nascimento", telefone: "" },
-            { nome: "Kaylane Assumpção", telefone: "" },
-            { nome: "Andressa Larocca", telefone: "" },
+            { nome: "André Felipe O. Cavalcante", telefone: "5513981404451" },
+            { nome: "Tatiana Gonçalves de Oliveira", telefone: "5513981854677" },
+            { nome: "Flávia Mara de Mattos", telefone: "5515974042000" },
+            { nome: "Leniára R. M. Araújo", telefone: "5513996461664" },
+            { nome: "Elaine do Nascimento", telefone: "5513976008877" },
+            { nome: "Kaylane Assumpção", telefone: "5513992123879" },
+            { nome: "Andressa Larocca Orlandi Pereira", telefone: "5513981512755" },
+            { nome: "Ulisses Dias Vieira", telefone: "5513988181515" },
+            { nome: "Georjana Garcia Gonçalves", telefone: "5512991797436" },
           ];
     for (const c of lista) {
       mensagensGeradas.push({
@@ -233,21 +233,21 @@ export async function executarRotinaDiariaRhema(options: {
   } else if (rotina === "FECHAMENTO_EXECUTIVO_1815") {
     mensagensGeradas.push({
       destinatario: "Brunno Anastácio (Gestor)",
-      telefone: gestorPhone || process.env.RHEMA_GESTOR_PHONE || "",
+      telefone: gestorPhone || process.env.RHEMA_GESTOR_PERSONAL_PHONE || process.env.RHEMA_GESTOR_PHONE || "556293856483",
       texto: gerarFechamentoExecutivo1815(),
       enviado: false,
     });
   } else if (rotina === "DOSSIE_PDI_OKR_SEXTA_1700") {
     mensagensGeradas.push({
       destinatario: "Brunno Anastácio (Gestor)",
-      telefone: gestorPhone || process.env.RHEMA_GESTOR_PHONE || "",
+      telefone: gestorPhone || process.env.RHEMA_GESTOR_PERSONAL_PHONE || process.env.RHEMA_GESTOR_PHONE || "556293856483",
       texto: gerarDossiePdiOkrSexta1700(),
       enviado: false,
     });
   } else if (rotina === "ESCALONAMENTO_SLA_GESTOR") {
     mensagensGeradas.push({
       destinatario: "Brunno Anastácio (Gestor)",
-      telefone: gestorPhone || process.env.RHEMA_GESTOR_PHONE || "",
+      telefone: gestorPhone || process.env.RHEMA_GESTOR_PERSONAL_PHONE || process.env.RHEMA_GESTOR_PHONE || "556293856483",
       texto: gerarAlertaEscalonamentoSlaGestor(),
       enviado: false,
     });

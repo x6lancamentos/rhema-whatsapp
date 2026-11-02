@@ -26,36 +26,47 @@ export class WhatsAppManager {
 
     async loadSessions() {
         if (!this.io) throw new Error("Socket.IO not initialized in WhatsAppManager");
-        const sessions = await prisma.session.findMany({
-            where: {
-                status: { not: "LOGGED_OUT" }
-            },
-            select: { sessionId: true, userId: true, status: true }
-        });
+        
+        for (let attempt = 1; attempt <= 4; attempt++) {
+            try {
+                const sessions = await prisma.session.findMany({
+                    where: {
+                        status: { not: "LOGGED_OUT" }
+                    },
+                    select: { sessionId: true, userId: true, status: true }
+                });
 
-        let started = 0;
-        for (const session of sessions) {
-            // Only auto-init sessions that were CONNECTED before (have auth creds)
-            const authCount = await prisma.authState.count({
-                where: { sessionId: session.sessionId }
-            });
-            if (authCount === 0) {
-                // No credentials — session was created but never connected
-                // Set to STOPPED so it doesn't spam reconnect
-                await prisma.session.update({
-                    where: { sessionId: session.sessionId },
-                    data: { status: "STOPPED" }
-                }).catch(() => {});
-                continue;
+                let started = 0;
+                for (const session of sessions) {
+                    // Only auto-init sessions that were CONNECTED before (have auth creds)
+                    const authCount = await prisma.authState.count({
+                        where: { sessionId: session.sessionId }
+                    });
+                    if (authCount === 0) {
+                        await prisma.session.update({
+                            where: { sessionId: session.sessionId },
+                            data: { status: "STOPPED" }
+                        }).catch(() => {});
+                        continue;
+                    }
+
+                    const instance = new WhatsAppInstance(session.sessionId, session.userId, this.io);
+                    instance.onRemovedFromManager = () => this.removeInstance(session.sessionId);
+                    this.sessions.set(session.sessionId, instance);
+                    await instance.init();
+                    started++;
+                }
+                logger.success("Manager", `Loaded ${started} sessions (${sessions.length - started} idle skipped).`);
+                return;
+            } catch (err: any) {
+                logger.warn("Manager", `Tentativa ${attempt}/4 de carregar sessões: ${err?.message || err}`);
+                if (attempt === 4) {
+                    logger.error("Manager", "Não foi possível carregar as sessões do banco de dados após 4 tentativas.", err);
+                    return;
+                }
+                await new Promise((r) => setTimeout(r, 2000));
             }
-
-            const instance = new WhatsAppInstance(session.sessionId, session.userId, this.io);
-            instance.onRemovedFromManager = () => this.removeInstance(session.sessionId);
-            this.sessions.set(session.sessionId, instance);
-            await instance.init();
-            started++;
         }
-        logger.success("Manager", `Loaded ${started} sessions (${sessions.length - started} idle skipped).`);
     }
 
     async createSession(userId: string, name: string, customSessionId?: string) {

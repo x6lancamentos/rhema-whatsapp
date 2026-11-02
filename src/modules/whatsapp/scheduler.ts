@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { waManager } from "./manager";
 import { logger } from "@/lib/logger";
 import { executarRotinaDiariaRhema, isRhemaRoutinesEnabled, type RotinaRhemaTipo } from "@/lib/ai/rhema-daily-routines";
+import { getGestorSession, getGestorPersonalPhone } from "@/lib/rhema-session";
+import { processPendingInsights } from "@/lib/ai/sdr/sdr-learner";
+import { runSdrFollowupTick, runSdrAntiNoShowTick, runSdrMorningQueueTick } from "@/lib/ai/sdr/sdr-followup";
 
 const rotinasDisparadasPorData = new Set<string>();
 
@@ -39,16 +42,30 @@ async function checkRhemaDailyRoutines() {
         if (rotinasDisparadasPorData.has(chaveUnica)) return;
         rotinasDisparadasPorData.add(chaveUnica);
 
-        const defaultSession = await prisma.session.findFirst({
-            where: { status: "CONNECTED" },
-        });
+        // Busca estritamente a sessão oficial do Gestor (Brunno Gerência) para disparos autônomos
+        const gestorSession = await getGestorSession();
+        const sessionIdAlvo = gestorSession?.sessionId;
+
+        if (!sessionIdAlvo || gestorSession.status !== "CONNECTED") {
+            logger.warn(
+                "Scheduler",
+                `Sessão do Gestor (${sessionIdAlvo || "não configurada"}) não está CONNECTED. Abortando disparo da rotina ${rotinaAlvo}.`
+            );
+            return;
+        }
 
         await executarRotinaDiariaRhema({
             rotina: rotinaAlvo,
-            sessionId: defaultSession?.sessionId,
-            dispararWhatsApp: Boolean(defaultSession?.sessionId),
+            sessionId: sessionIdAlvo,
+            gestorPhone: getGestorPersonalPhone(),
+            dispararWhatsApp: true,
         });
         logger.info("Scheduler", `Rotina autônoma Rhema OS executada: ${rotinaAlvo} (${hhmm})`);
+
+        // Processa periodicamente insights de auto-aprendizado do SDR para o grupo Rhema SDR
+        if (brTime.getMinutes() === 0 || brTime.getMinutes() === 30) {
+            processPendingInsights().catch((e) => logger.warn("Scheduler", "Aviso no learner SDR:", e));
+        }
     } catch (err) {
         logger.warn("Scheduler", "Aviso ao checar rotinas diárias Rhema OS:", err);
     }
@@ -120,16 +137,35 @@ const checkScheduledMessages = async () => {
     }
 };
 
+async function checkSdrAutonomousCycles() {
+    try {
+        const sdrSessionId = process.env.RHEMA_SDR_SESSION_ID || "5mhrx9";
+        const instance = waManager.getInstance(sdrSessionId);
+        const sock = instance?.socket;
+        if (!sock) return;
+
+        await Promise.allSettled([
+            runSdrFollowupTick(sock),
+            runSdrAntiNoShowTick(sock),
+            runSdrMorningQueueTick(sock),
+        ]);
+    } catch (sdrCycleErr) {
+        logger.warn("Scheduler", "Aviso no ciclo autônomo SDR:", sdrCycleErr);
+    }
+}
+
 export function startScheduler() {
     logger.info("Scheduler", "Starting Message Scheduler & Rhema OS Autonomous Routines...");
 
     // Run immediately on start
     checkScheduledMessages();
     checkRhemaDailyRoutines();
+    checkSdrAutonomousCycles();
 
     // Then run every 30 seconds
     setInterval(() => {
         checkScheduledMessages();
         checkRhemaDailyRoutines();
+        checkSdrAutonomousCycles();
     }, 30 * 1000);
 }

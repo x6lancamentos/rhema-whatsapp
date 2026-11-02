@@ -26,8 +26,8 @@ export interface OpenRouterResponse {
   };
 }
 
-const DEFAULT_PRIMARY_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-const DEFAULT_FALLBACK_MODEL = "nvidia/nemotron-3.5-lightning:free";
+const DEFAULT_PRIMARY_MODEL = "nvidia/nemotron-3.5-lightning:free";
+const DEFAULT_FALLBACK_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
 
 /**
  * Chamada robusta ao OpenRouter com suporte a fallback automático de modelos

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { callOpenRouter } from "./openrouter-client";
+import { callModelRouter } from "./model-router";
 import { buildOwnerContextPrompt } from "./prompts";
 import { recordImoviewInteraction } from "@/lib/imoview";
 import { WhatsAppManager } from "@/modules/whatsapp/manager";
@@ -302,48 +302,42 @@ export async function processOwnerMessage(input: AgentProcessInput): Promise<Age
     content: input.messageText,
   });
 
-  // Disparar requisição para o OpenRouter (NVIDIA Nemotron ou Llama 3.3)
-  const aiResult = await callOpenRouter({
-    apiKey,
-    model: config.model,
-    fallbackModel: config.fallbackModel,
+  // Disparar requisição resiliente via ModelRouter (Task: OWNER_CHAT)
+  const aiResult = await callModelRouter({
+    task: "OWNER_CHAT",
     messages: apiMessages,
     temperature: config.temperature,
-    responseFormatJson: true,
+    jsonMode: true,
   });
 
-  // Fazer parse seguro e resiliente do JSON retornado pela IA (compatível com thinking/reasoning models)
-  let parsed: any = {};
-  try {
-    const rawContent = aiResult.content.trim();
-    // 1. Tentar extrair de bloco markdown ```json ... ```
-    const codeBlockMatch = rawContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (codeBlockMatch && codeBlockMatch[1]) {
-      try {
+  // Fazer parse seguro e resiliente do JSON retornado pela IA
+  let parsed: any = aiResult.jsonParsed || {};
+  if (!parsed || Object.keys(parsed).length === 0) {
+    try {
+      const rawContent = aiResult.content.trim();
+      const codeBlockMatch = rawContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlockMatch && codeBlockMatch[1]) {
         parsed = JSON.parse(codeBlockMatch[1].trim());
-      } catch {}
-    }
-
-    // 2. Se não encontrou ou falhou, extrair do primeiro { até o último }
-    if (!parsed || Object.keys(parsed).length === 0) {
-      const firstBrace = rawContent.indexOf("{");
-      const lastBrace = rawContent.lastIndexOf("}");
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        parsed = JSON.parse(rawContent.substring(firstBrace, lastBrace + 1));
       } else {
-        parsed = JSON.parse(rawContent);
+        const firstBrace = rawContent.indexOf("{");
+        const lastBrace = rawContent.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          parsed = JSON.parse(rawContent.substring(firstBrace, lastBrace + 1));
+        } else {
+          parsed = JSON.parse(rawContent);
+        }
       }
+    } catch (err) {
+      logger.error("AIAgent", "Falha ao fazer parse do JSON retornado pela IA. Resposta bruta:", aiResult.content);
+      parsed = {
+        replyToOwner: "Agradecemos muito pelo retorno! Nossa equipe da Rhema Imóveis já anotou as informações com carinho.",
+        isPropertyUpdate: false,
+        propertyStatus: "INALTERADO",
+        notes: input.messageText,
+        needsReceptionAlert: false,
+        conversationSummaryUpdate: (rollingSummary + `\nProprietário enviou: "${input.messageText}"`).trim(),
+      };
     }
-  } catch (err) {
-    logger.error("AIAgent", "Falha ao fazer parse do JSON retornado pela IA. Resposta bruta:", aiResult.content);
-    parsed = {
-      replyToOwner: "Agradecemos muito pelo retorno! Nossa equipe da Rhema Imóveis já anotou as informações com carinho.",
-      isPropertyUpdate: false,
-      propertyStatus: "INALTERADO",
-      notes: input.messageText,
-      needsReceptionAlert: false,
-      conversationSummaryUpdate: (rollingSummary + `\nProprietário enviou: "${input.messageText}"`).trim(),
-    };
   }
 
   // Mesclagem CUMULATIVA do estado extraído (para nunca perder valor, horários ou indicações já informados)
