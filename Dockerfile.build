@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY patches ./patches/
 COPY prisma ./prisma/
-RUN npm ci --legacy-peer-deps && npm cache clean --force
+RUN npm install --legacy-peer-deps && npm cache clean --force
 
 # Source & build
 COPY . .
