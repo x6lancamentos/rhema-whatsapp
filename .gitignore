@@ -54,3 +54,12 @@ start-local.bat
 start-local.ps1
 data/exports/
 data/rhema-contacts.json
+
+*.pdf
+scratch/
+*.txt
+
+find-*.ts
+list-rhema-team.ts
+test-conn.ts
+
