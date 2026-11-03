@@ -5,6 +5,7 @@ import { executarRotinaDiariaRhema, isRhemaRoutinesEnabled, type RotinaRhemaTipo
 import { getGestorSession, getGestorPersonalPhone } from "@/lib/rhema-session";
 import { processPendingInsights } from "@/lib/ai/sdr/sdr-learner";
 import { runSdrFollowupTick, runSdrAntiNoShowTick, runSdrMorningQueueTick } from "@/lib/ai/sdr/sdr-followup";
+import { runHunterJitterTick } from "@/lib/hunter/hunter-orchestrator";
 
 const rotinasDisparadasPorData = new Set<string>();
 
@@ -148,6 +149,7 @@ async function checkSdrAutonomousCycles() {
             runSdrFollowupTick(sock),
             runSdrAntiNoShowTick(sock),
             runSdrMorningQueueTick(sock),
+            runHunterJitterTick(sock),
         ]);
     } catch (sdrCycleErr) {
         logger.warn("Scheduler", "Aviso no ciclo autônomo SDR:", sdrCycleErr);

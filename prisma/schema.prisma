@@ -751,5 +751,113 @@ model SdrLearningInsight {
   @@index([createdAt])
 }
 
+// ==========================================
+// MÓDULO RHEMA HUNTER (CAPTAÇÃO EEMOVEL & AUTO-EVOLUÇÃO)
+// ==========================================
+
+model HunterConfig {
+  id            String   @id @default("default")
+  bairrosSantos Json     // ["Embaré", "Gonzaga", "Ponta da Praia", "Boqueirão", "Aparecida"]
+  valorMin      Float    @default(350000)
+  valorMax      Float    @default(2500000)
+  tiposImovel   Json     // ["Apartamento", "Casa", "Cobertura"]
+  limiteDiario  Int      @default(15)
+  delayMinSeg   Int      @default(45)
+  delayMaxSeg   Int      @default(180)
+  ativo         Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+}
+
+model HunterOpportunity {
+  id                   String                 @id @default(cuid())
+  fonte                String                 // EEMOVEL, WEB_FSBO, BASE_RHEMA, REVERSE_SDR
+  externalId           String?                @unique
+  tipoOportunidade     String                 // FSBO_NOVO, REDUCAO_PRECO, PARADO_LONGO_PRAZO, REVERSE_DEMAND
+  
+  // Imóvel
+  titulo               String?
+  bairro               String
+  cidade               String                 @default("Santos")
+  tipoImovel           String
+  valorPretendido      Float
+  condominio           Float?
+  iptu                 Float?
+  quartos              Int?
+  vagas                Int?
+  areaM2               Float?
+  enderecoAprox        String?
+  fotosOrigem          Json?
+  dadosEemovel         Json?
+  
+  // Proprietário & Perfil Psicológico (Big Five + DISC)
+  proprietarioNome     String
+  proprietarioTelefone String
+  proprietarioJid      String
+  perfilPsicometrico   Json?
+  scoreParticular      Int                    @default(100)
+  
+  // Status do Funil
+  status               String                 @default("DISCOVERED")
+  
+  // Direcionamento Gestor
+  notificadoBrunnoEm   DateTime?
+  corretorDesignado    String?
+  visitaAgendadaEm     DateTime?
+  fichaDigitalId       String?
+  
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  cadenceLogs          HunterCadenceLog[]
+
+  @@index([proprietarioTelefone])
+  @@index([status])
+  @@index([bairro])
+  @@index([tipoOportunidade])
+}
+
+model HunterCadenceLog {
+  id             String            @id @default(cuid())
+  opportunityId  String
+  direcao        String            // IN, OUT
+  tipo           String            // INITIAL_PITCH, OBJECTION_HANDLING, FOLLOW_UP, OWNER_REPLY
+  conteudo       String            @db.Text
+  analiseCoach   Json?
+  createdAt      DateTime          @default(now())
+
+  opportunity    HunterOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId, createdAt])
+}
+
+model PromptEvolutionProposal {
+  id                  String    @id @default(cuid())
+  learnId             String    @unique // #LEARN-2026-11-001
+  modulo              String    // SDR_COMPRADOR, SDR_PROPRIETARIO, HUNTER_CAPTACAO
+  titulo              String
+  motivoAprimoramento String    @db.Text
+  promptAntes         String    @db.Text
+  promptDepois        String    @db.Text
+  diffResumo          String?   @db.Text
+  status              String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  aprovadoPor         String?
+  aprovadoEm          DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([status])
+  @@index([modulo])
+}
+
+model AgentDebateMessage {
+  id         String   @id @default(cuid())
+  proposalId String?
+  remetente  String   // MASTER_COACH, DATA_ANALYST, GESTOR
+  conteudo   String   @db.Text
+  metadados  Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 
 

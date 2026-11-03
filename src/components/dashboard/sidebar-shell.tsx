@@ -50,15 +50,15 @@ export function SidebarShell({ appName, logoUrl, userName, userEmail, version }:
                                 <img src={logoUrl} alt={appName} className="h-8 max-w-[110px] object-contain" />
                             </div>
                         ) : (
-                            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary via-emerald-500 to-teal-500 flex items-center justify-center text-primary-foreground font-bold text-sm shadow-md shadow-primary/20 shrink-0">
-                                {appName.charAt(0)}
+                            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md shadow-amber-500/20 shrink-0">
+                                R
                             </div>
                         )}
                         <div className="flex flex-col min-w-0">
                             <h1 className="text-sm font-bold tracking-tight text-foreground truncate">
-                                {appName}
+                                {appName === "WA-AKG" ? "Rhema OS" : appName}
                             </h1>
-                            <p className="text-[10px] text-muted-foreground font-medium">WhatsApp Gateway</p>
+                            <p className="text-[10px] text-amber-600/90 dark:text-amber-400 font-semibold uppercase tracking-wider">Sistema Imobiliário</p>
                         </div>
                     </div>
                 )}

@@ -105,7 +105,7 @@ const navGroups: NavGroup[] = [
     },
 ];
 
-export function MobileNav({ appName = "WA-AKG" }: { appName?: string }) {
+export function MobileNav({ appName = "Rhema OS" }: { appName?: string }) {
     const [open, setOpen] = useState(false);
     const pathname = usePathname();
     const { data: session } = useSession();

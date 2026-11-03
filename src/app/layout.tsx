@@ -15,20 +15,20 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const APP_DESCRIPTION = "Self-hosted WhatsApp Gateway with Multi-device support, Auto-replies, API integration, and session management dashboard.";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://wa-akg.app";
+const APP_DESCRIPTION = "Rhema OS - Sistema Operacional Imobiliário 100% Agêntico (Diretoria, SDR Autônomo, Hunter eEmovel e WhatsApp Gateway).";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://rhemaimobiliaria.com.br";
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#D4AF37" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B0F17" },
   ],
   width: "device-width",
   initialScale: 1,
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  let appName = "WA-AKG";
+  let appName = "Rhema OS";
   try {
     // @ts-ignore
     const config = await prisma.systemConfig.findUnique({ where: { id: "default" } });
@@ -37,7 +37,7 @@ export async function generateMetadata(): Promise<Metadata> {
     console.error("Failed to fetch system config for metadata:", e);
   }
 
-  const appDefaultTitle = `${appName} | Premium WhatsApp Gateway`;
+  const appDefaultTitle = `${appName} | Sistema Operacional Imobiliário`;
 
   return {
     metadataBase: new URL(APP_URL),

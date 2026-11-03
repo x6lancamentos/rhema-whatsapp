@@ -32,6 +32,8 @@ import {
     Sparkles,
     Compass,
     Award,
+    Target,
+    Brain,
 } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
 import { useLanguage } from "@/components/language-provider";
@@ -95,7 +97,9 @@ const navGroups: NavGroup[] = [
         label: "Automation",
         labelKey: "nav.group.automation",
         items: [
-            { href: "/dashboard/sdr", label: "SDR Autônomo & Kanban", labelKey: "nav.sdr_kanban", icon: LayoutDashboard },
+            { href: "/dashboard/sdr", label: "SDR Autônomo & Pré-Vendas", labelKey: "nav.sdr_kanban", icon: LayoutDashboard },
+            { href: "/dashboard/hunter", label: "Rhema Hunter (Captação)", labelKey: "nav.hunter" as any, icon: Target },
+            { href: "/dashboard/learning", label: "Laboratório de Auto-Evolução", labelKey: "nav.learning" as any, icon: Brain, allowedRoles: ["SUPERADMIN", "ADMIN", "OWNER"] },
             { href: "/dashboard/rhema-os", label: "Rhema OS (Diretoria IA)", labelKey: "nav.rhema_os" as any, icon: Sparkles, allowedRoles: ["SUPERADMIN", "ADMIN", "OWNER"] },
             { href: "/dashboard/ai-agent", label: "Camila AI", labelKey: "nav.ai_agent", icon: Sparkles },
             { href: "/dashboard/bot-settings", label: "Bot Settings", labelKey: "nav.bot_settings", icon: Bot },

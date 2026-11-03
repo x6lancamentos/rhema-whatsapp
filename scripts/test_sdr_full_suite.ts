@@ -105,3 +105,4 @@ runTestSuite().catch((e) => {
   console.error("Erro fatal na suíte de testes:", e);
   process.exit(1);
 });
+

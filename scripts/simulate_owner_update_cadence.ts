@@ -212,3 +212,4 @@ async function executarSimulacaoCadencia() {
 executarSimulacaoCadencia().catch((e) => {
   console.error("Erro fatal na simulação:", e);
 });
+

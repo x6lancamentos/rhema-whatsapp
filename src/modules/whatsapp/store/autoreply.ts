@@ -417,6 +417,24 @@ export async function bindAutoReply(sock: WASocket, sessionId: string) {
                 }
             }
 
+            // 3.1 Se for resposta de proprietário em captação no Rhema Hunter
+            if (!fromMe && !isGroup && trimmedText) {
+                try {
+                    const { handleInboundHunterMessage } = await import("@/lib/hunter/hunter-orchestrator");
+                    const hunterResult = await handleInboundHunterMessage({
+                        sock,
+                        remoteJid,
+                        cleanPhone: cleanSenderDigits,
+                        text: trimmedText,
+                    });
+                    if (hunterResult.handled) {
+                        continue;
+                    }
+                } catch (hunterErr) {
+                    logger.warn("AutoReply", "Aviso ao processar mensagem Hunter:", hunterErr);
+                }
+            }
+
             // 4. Se for mensagem comum de cliente/grupo, verifica permissões do Chatbot (AutoReply)
             if (!isBotEnabled || !canAutoReply(config, fromMe, senderJid)) {
                 continue;
