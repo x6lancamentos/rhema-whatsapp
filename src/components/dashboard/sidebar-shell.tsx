@@ -30,35 +30,30 @@ export function SidebarShell({ appName, logoUrl, userName, userEmail, version }:
             `}
         >
             {/* Logo / Brand */}
-            <div className={`border-b border-sidebar-border/40 transition-all duration-300 ${isCollapsed ? "px-3 py-4" : "px-5 py-4"}`}>
+            <div className={`border-b border-sidebar-border/40 transition-all duration-300 ${isCollapsed ? "px-2 py-4" : "px-4 py-3.5"}`}>
                 {isCollapsed ? (
                     <div className="flex justify-center">
-                        {logoUrl ? (
-                            <div className="h-10 w-10 bg-white/95 dark:bg-card/90 rounded-xl p-1.5 shadow-2xs border border-border/40 flex items-center justify-center">
-                                <img src={logoUrl} alt={appName} className="h-full w-full object-contain" />
-                            </div>
-                        ) : (
-                            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary via-emerald-500 to-teal-500 flex items-center justify-center text-primary-foreground font-bold text-sm shadow-md shadow-primary/20">
-                                {appName.charAt(0)}
-                            </div>
-                        )}
+                        <div className="h-10 w-10 bg-white dark:bg-card rounded-xl p-1 shadow-xs border border-border/60 flex items-center justify-center">
+                            <img src={logoUrl || "/rhema-logo.png"} alt="Rhema OS" className="h-full w-full object-contain" />
+                        </div>
                     </div>
                 ) : (
-                    <div className="flex items-center gap-3">
-                        {logoUrl ? (
-                            <div className="bg-white/95 dark:bg-card/90 px-2 py-1.5 rounded-xl shadow-2xs border border-border/40 flex items-center justify-center">
-                                <img src={logoUrl} alt={appName} className="h-8 max-w-[110px] object-contain" />
-                            </div>
-                        ) : (
-                            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md shadow-amber-500/20 shrink-0">
-                                R
-                            </div>
-                        )}
+                    <div className="flex items-center gap-2.5">
+                        <div className="bg-white dark:bg-slate-900 px-2 py-1.5 rounded-xl shadow-xs border border-border/60 flex items-center justify-center shrink-0">
+                            <img src={logoUrl || "/rhema-logo.png"} alt="Rhema Imóveis" className="h-7 max-w-[110px] object-contain" />
+                        </div>
                         <div className="flex flex-col min-w-0">
-                            <h1 className="text-sm font-bold tracking-tight text-foreground truncate">
-                                {appName === "WA-AKG" ? "Rhema OS" : appName}
-                            </h1>
-                            <p className="text-[10px] text-amber-600/90 dark:text-amber-400 font-semibold uppercase tracking-wider">Sistema Imobiliário</p>
+                            <div className="flex items-center gap-1.5">
+                                <h1 className="text-sm font-black tracking-tight text-foreground">
+                                    Rhema OS
+                                </h1>
+                                <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                    v5.1
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-amber-600/90 dark:text-amber-400 font-bold uppercase tracking-wider">
+                                Diretoria & Vendas
+                            </p>
                         </div>
                     </div>
                 )}
@@ -74,7 +69,7 @@ export function SidebarShell({ appName, logoUrl, userName, userEmail, version }:
             >
                 {isCollapsed ? (
                     <div suppressHydrationWarning={true} className="flex flex-col items-center gap-2">
-                        <div suppressHydrationWarning={true} className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary dark:text-emerald-400">
+                        <div suppressHydrationWarning={true} className="h-8 w-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-600 dark:text-amber-400">
                             {userName?.charAt(0)?.toUpperCase() || "U"}
                         </div>
                         <button
@@ -90,7 +85,7 @@ export function SidebarShell({ appName, logoUrl, userName, userEmail, version }:
                         <div suppressHydrationWarning={true} className="flex items-center gap-2.5">
                             <div 
                                 suppressHydrationWarning={true}
-                                className="h-8 w-8 rounded-lg bg-primary/10 dark:bg-primary/20 border border-primary/25 flex items-center justify-center text-xs font-bold text-primary dark:text-emerald-400 shrink-0"
+                                className="h-8 w-8 rounded-lg bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-600 dark:text-amber-400 shrink-0"
                             >
                                 {userName?.charAt(0)?.toUpperCase() || "U"}
                             </div>

@@ -19,7 +19,7 @@ export default async function DashboardLayout({
     const session = await auth();
     // @ts-ignore
     const systemConfig = await prisma.systemConfig.findUnique({ where: { id: "default" } });
-    const appName = systemConfig?.appName || "Rhema WhatsApp";
+    const appName = systemConfig?.appName || "Rhema OS";
     const registrationEnabled = systemConfig?.enableRegistration ?? true;
 
     return (

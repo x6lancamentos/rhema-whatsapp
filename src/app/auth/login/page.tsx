@@ -79,8 +79,15 @@ function LoginForm() {
           <div className="relative mb-4 p-3 bg-white rounded-2xl shadow-xl shadow-black/10 border border-border/20 flex items-center justify-center">
             <img src="/rhema-logo.png" alt="Rhema Imóveis" className="h-12 w-auto object-contain" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Rhema WhatsApp</h1>
-          <p className="text-muted-foreground mt-1 text-sm font-medium">Painel de Automação & Gateway WhatsApp</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-black tracking-tight text-foreground">Rhema OS</h1>
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+              v5.1
+            </span>
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs sm:text-sm font-medium text-center">
+            Sistema Operacional & Diretoria Agêntica · Rhema Imóveis
+          </p>
         </div>
 
         <div className="glass-panel rounded-3xl p-8 shadow-2xl shadow-black/5 dark:shadow-black/40">

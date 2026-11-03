@@ -91,11 +91,13 @@ export function DashboardClientView({
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">{t("dashboard.title")}</h2>
-                    <p className="text-sm text-muted-foreground mt-1">{t("dashboard.subtitle")}</p>
+                    <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground flex items-center gap-2.5">
+                        Dashboard <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-bold">Rhema OS</span>
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-1">Visão geral do ecossistema e monitoramento das conexões</p>
                 </div>
                 <Link href="/dashboard/sessions">
-                    <Button size="sm" className="gap-2 shadow-sm hover:shadow-primary/20">
+                    <Button size="sm" className="gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold shadow-md shadow-amber-500/20">
                         <Plus className="h-4 w-4" /> {t("dashboard.new_session")}
                     </Button>
                 </Link>
