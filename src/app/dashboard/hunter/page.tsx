@@ -18,11 +18,16 @@ import {
   ShieldAlert,
   Clock,
   CheckCircle2,
+  Rocket,
+  Pause,
+  Send,
+  Zap,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 const BAIRROS_SANTOS_PRESET = [
   "Embaré",
@@ -120,6 +125,11 @@ export default function HunterPage() {
   const [limiteDiario, setLimiteDiario] = useState(15);
   const [ativoHunter, setAtivoHunter] = useState(true);
 
+  // Estados de Fila e Disparo
+  const [filaAtiva, setFilaAtiva] = useState(false);
+  const [iniciandoFila, setIniciandoFila] = useState(false);
+  const [abordandoId, setAbordandoId] = useState<string | null>(null);
+
   // Estados de UI
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -131,11 +141,12 @@ export default function HunterPage() {
   const carregarDados = async () => {
     try {
       setLoading(true);
-      const [resOpp, resConfig] = await Promise.all([
+      const [resOpp, resConfig, resQueue] = await Promise.all([
         fetch(
           `/api/hunter/opportunities?search=${encodeURIComponent(search)}&bairro=${encodeURIComponent(filterBairro)}`
         ),
         fetch("/api/hunter/config"),
+        fetch("/api/hunter/prospect/queue").catch(() => null),
       ]);
 
       const dataOpp = await resOpp.json();
@@ -151,7 +162,17 @@ export default function HunterPage() {
         if (c.valorMin) setValorMin(c.valorMin);
         if (c.valorMax) setValorMax(c.valorMax);
         if (c.limiteDiario) setLimiteDiario(c.limiteDiario);
-        if (c.ativo !== undefined) setAtivoHunter(c.ativo);
+        if (c.ativo !== undefined) {
+          setAtivoHunter(c.ativo);
+          setFilaAtiva(c.ativo);
+        }
+      }
+
+      if (resQueue) {
+        const dataQueue = await resQueue.json();
+        if (dataQueue.success) {
+          setFilaAtiva(dataQueue.ativo);
+        }
       }
     } catch (e) {
       console.error("Erro ao carregar dados do Hunter:", e);
@@ -167,13 +188,26 @@ export default function HunterPage() {
   const dispararSincronizacaoEemovel = async () => {
     try {
       setSyncing(true);
-      const res = await fetch("/api/hunter/sync", { method: "POST" });
+      const res = await fetch("/api/hunter/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bairros: bairrosSelecionados,
+          valorMin,
+          valorMax,
+          limite: limiteDiario,
+        }),
+      });
       const data = await res.json();
       if (data.success) {
+        toast.success(data.message || "Sincronização concluída com sucesso!");
         await carregarDados();
+      } else {
+        toast.error(data.error || "Erro ao sincronizar com eEmovel.");
       }
     } catch (err) {
-      console.error("Erro ao sincronizar EEmovel:", err);
+      console.error("Erro ao sincronizar eEmovel:", err);
+      toast.error("Erro de conexão ao sincronizar com eEmovel.");
     } finally {
       setSyncing(false);
     }
@@ -194,11 +228,61 @@ export default function HunterPage() {
         }),
       });
       setShowConfigPanel(false);
+      toast.success("Parâmetros do eEmovel atualizados com sucesso!");
       await carregarDados();
     } catch (e) {
       console.error("Erro ao salvar config:", e);
+      toast.error("Erro ao salvar parâmetros.");
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  // 🚀 Disparo da Fila Anti-Spam
+  const toggleFila = async () => {
+    try {
+      setIniciandoFila(true);
+      const action = filaAtiva ? "pause" : "start";
+      const res = await fetch("/api/hunter/prospect/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFilaAtiva(!filaAtiva);
+        toast.success(data.message);
+        await carregarDados();
+      } else {
+        toast.error(data.error || "Erro ao alterar estado da fila.");
+      }
+    } catch (err: any) {
+      toast.error("Falha ao comunicar com o servidor.");
+    } finally {
+      setIniciandoFila(false);
+    }
+  };
+
+  // ▶ Abordar 1 Proprietário Agora
+  const abordarAgora = async (opportunityId: string, proprietarioNome: string) => {
+    try {
+      setAbordandoId(opportunityId);
+      const res = await fetch("/api/hunter/prospect/single", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opportunityId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Abordagem disparada para ${proprietarioNome}!`);
+        await carregarDados();
+      } else {
+        toast.error(data.error || "Erro ao disparar abordagem.");
+      }
+    } catch (err: any) {
+      toast.error("Falha ao disparar abordagem para o WhatsApp.");
+    } finally {
+      setAbordandoId(null);
     }
   };
 
@@ -215,6 +299,9 @@ export default function HunterPage() {
     setBairrosSelecionados(Array.from(new Set([...bairrosSelecionados, ...orla])));
   };
 
+  const descobertosCount = opportunities.filter((op) => op.status === "DISCOVERED").length;
+  const filaCount = opportunities.filter((op) => op.status === "QUEUED").length;
+
   return (
     <div className="flex flex-col gap-6">
       {/* Top Header */}
@@ -229,7 +316,7 @@ export default function HunterPage() {
                 <h1 className="text-2xl font-black tracking-tight text-foreground">
                   Rhema Hunter
                 </h1>
-                <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-500 dark:text-amber-400 font-bold text-[11px] px-2 py-0.5">
+                <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[11px] px-2 py-0.5">
                   eEmovel Big Data
                 </Badge>
               </div>
@@ -240,7 +327,28 @@ export default function HunterPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {/* Botão de Fila Anti-Spam */}
+          <Button
+            onClick={toggleFila}
+            disabled={iniciandoFila}
+            variant={filaAtiva ? "outline" : "default"}
+            className={`flex items-center gap-2 text-xs font-bold h-9 transition ${
+              filaAtiva
+                ? "border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                : "bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 text-slate-950 shadow-md shadow-amber-500/20"
+            }`}
+          >
+            {iniciandoFila ? (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            ) : filaAtiva ? (
+              <Pause className="h-3.5 w-3.5 text-amber-500" />
+            ) : (
+              <Rocket className="h-3.5 w-3.5" />
+            )}
+            {filaAtiva ? "⏸ Pausar Fila Anti-Spam" : "🚀 Iniciar Fila de Prospecção"}
+          </Button>
+
           <Button
             variant="outline"
             onClick={() => setShowConfigPanel(!showConfigPanel)}
@@ -260,6 +368,36 @@ export default function HunterPage() {
           </Button>
         </div>
       </div>
+
+      {/* Banner de Fila Anti-Spam Ativa */}
+      {filaAtiva && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+            </span>
+            <div>
+              <p className="text-xs font-black text-foreground">
+                Fila de Prospecção Ativa · Intervalo Anti-Spam com Jitter (45s a 180s)
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {filaCount > 0
+                  ? `${filaCount} imóveis aguardando disparo com simulação de digitação humana.`
+                  : "Aguardando novos leads na fila para disparo seguro."}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={toggleFila}
+            className="h-8 text-xs font-bold border-amber-500/40 text-foreground hover:bg-amber-500/10 shrink-0 self-start sm:self-auto"
+          >
+            <Pause className="h-3 w-3 mr-1.5 text-amber-500" /> Pausar Fila
+          </Button>
+        </div>
+      )}
 
       {/* Painel Expansível de Filtros (Bairros & Preço) */}
       {showConfigPanel && (
@@ -452,7 +590,7 @@ export default function HunterPage() {
           return (
             <div
               key={col.id}
-              className="flex flex-col rounded-2xl border border-border/70 bg-card/50 backdrop-blur-xs p-3.5 w-[300px] min-w-[300px] shrink-0 h-[720px] shadow-xs"
+              className="flex flex-col rounded-2xl border border-border/70 bg-card/50 backdrop-blur-xs p-3.5 w-[300px] min-w-[300px] shrink-0 h-[740px] shadow-xs"
             >
               {/* Header da Coluna */}
               <div className="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-border/50">
@@ -549,6 +687,18 @@ export default function HunterPage() {
                           )}
                         </div>
                       </div>
+
+                      {/* Botão ▶ Abordar Agora (Para leads Descobertos ou em Fila) */}
+                      {(item.status === "DISCOVERED" || item.status === "QUEUED") && (
+                        <button
+                          onClick={() => abordarAgora(item.id, item.proprietarioNome)}
+                          disabled={abordandoId === item.id}
+                          className="w-full mt-2.5 py-1.5 px-3 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition disabled:opacity-50"
+                        >
+                          <Send className="h-3 w-3" />
+                          {abordandoId === item.id ? "Disparando..." : "▶ Abordar Agora"}
+                        </button>
+                      )}
 
                       {item.status === "VISIT_ACCEPTED" && (
                         <div className="mt-2 pt-1.5 border-t border-emerald-500/20 flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">

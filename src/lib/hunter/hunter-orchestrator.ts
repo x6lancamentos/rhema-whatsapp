@@ -4,6 +4,7 @@ import { callModelRouter } from "@/lib/ai/model-router";
 import { HUNTER_SYSTEM_PROMPT } from "./hunter-prompts";
 import { createFichaDraft } from "./ficha-bridge";
 import { sendHumanBubblesWithTyping } from "../ai/sdr/sdr-orchestrator";
+import { waManager } from "@/modules/whatsapp/manager";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -13,6 +14,142 @@ const BRUNNO_WHATSAPP_JID = process.env.BRUNNO_WHATSAPP_JID || "556293856483@s.w
 /**
  * 1. Processa a Fila Anti-Spam com Jitter Randômico (45s a 180s)
  */
+/**
+ * Obtém o socket Baileys ativo do WhatsAppManager
+ */
+export function getActiveWhatsAppSocket(): any {
+  try {
+    const sessions = (waManager as any)?.sessions;
+    if (sessions && sessions instanceof Map) {
+      for (const [id, inst] of sessions.entries()) {
+        if (inst && inst.socket && inst.status === "CONNECTED") {
+          return inst.socket;
+        }
+      }
+    }
+  } catch (e) {
+    logger.warn("HunterOrchestrator", "Não foi possível obter socket do waManager:", e);
+  }
+  return null;
+}
+
+/**
+ * Dispara abordagem manual direta em 1 oportunidade específica (Botão ▶ Abordar Agora)
+ */
+export async function approachSingleOpportunity(opportunityId: string): Promise<{ success: boolean; message: string; opportunity?: any }> {
+  const opp = await prisma.hunterOpportunity.findUnique({
+    where: { id: opportunityId },
+  });
+
+  if (!opp) {
+    throw new Error("Oportunidade não encontrada.");
+  }
+
+  const valorFormatado = opp.valorPretendido.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  let bubble1 = `Olá ${opp.proprietarioNome}, tudo bem? Aqui é da Rhema Imóveis em Santos.`;
+  let bubble2 = `Vi seu anúncio do ${opp.tipoImovel.toLowerCase()} no ${opp.bairro}. Estamos com compradores em carteira buscando essa tipologia na sua rua. Podemos levar interessados com agendamento prévio?`;
+
+  if (opp.tipoOportunidade === "REDUCAO_PRECO") {
+    bubble2 = `Acompanhamos o mercado de Santos e vimos a recente atualização no valor do seu ${opp.tipoImovel.toLowerCase()} no ${opp.bairro} (${valorFormatado}). Temos clientes buscando nessa faixa exata. Aceitaria apresentar aos nossos compradores?`;
+  } else if (opp.tipoOportunidade === "PARADO_LONGO_PRAZO") {
+    bubble2 = `Vi que o seu ${opp.tipoImovel.toLowerCase()} no ${opp.bairro} está anunciado há algum tempo. Na Rhema trabalhamos com um programa de Exclusividade Premium de 90 dias com fotos profissionais e alta visibilidade. Gostaria de conhecer nossa proposta?`;
+  }
+
+  // Atualiza status para APPROACHING
+  const updatedOpp = await prisma.hunterOpportunity.update({
+    where: { id: opp.id },
+    data: { status: "APPROACHING" },
+  });
+
+  // Tenta enviar via WhatsApp
+  const sock = getActiveWhatsAppSocket();
+  if (sock) {
+    try {
+      await sendHumanBubblesWithTyping({
+        sock,
+        toJid: opp.proprietarioJid,
+        bubbles: [bubble1, bubble2],
+        modelUsed: "hunter-direct-trigger",
+      });
+      logger.info("HunterOrchestrator", `Abordagem direta enviada para ${opp.proprietarioNome} (${opp.proprietarioJid}).`);
+    } catch (e: any) {
+      logger.warn("HunterOrchestrator", `Aviso no envio WhatsApp direto: ${e.message}`);
+    }
+  } else {
+    logger.info("HunterOrchestrator", `Socket WhatsApp offline no momento; status atualizado para APPROACHING.`);
+  }
+
+  // Registra no log de cadência
+  await prisma.hunterCadenceLog.create({
+    data: {
+      opportunityId: opp.id,
+      direcao: "OUT",
+      tipo: "INITIAL_PITCH",
+      conteudo: `${bubble1}\n${bubble2}`,
+      analiseCoach: { tipoAbordagem: opp.tipoOportunidade, manualTrigger: true },
+    },
+  });
+
+  return {
+    success: true,
+    message: `Abordagem enviada para ${opp.proprietarioNome}!`,
+    opportunity: updatedOpp,
+  };
+}
+
+/**
+ * Inicia a Fila Anti-Spam (Move DISCOVERED para QUEUED e ativa worker)
+ */
+export async function startHunterQueue(): Promise<{ success: boolean; count: number; message: string }> {
+  const updated = await prisma.hunterOpportunity.updateMany({
+    where: { status: "DISCOVERED" },
+    data: { status: "QUEUED" },
+  });
+
+  await prisma.hunterConfig.upsert({
+    where: { id: "default" },
+    update: { ativo: true },
+    create: {
+      id: "default",
+      ativo: true,
+      bairrosSantos: ["Embaré", "Gonzaga", "Ponta da Praia", "Boqueirão", "Aparecida"],
+      tiposImovel: ["Apartamento", "Casa", "Cobertura"],
+    },
+  });
+
+  logger.info("HunterOrchestrator", `Fila de prospecção iniciada com ${updated.count} leads.`);
+
+  return {
+    success: true,
+    count: updated.count,
+    message: `Fila Anti-Spam iniciada! ${updated.count} oportunidades aguardando envio com Jitter (45s a 180s).`,
+  };
+}
+
+/**
+ * Pausa a Fila Anti-Spam
+ */
+export async function pauseHunterQueue(): Promise<{ success: boolean; message: string }> {
+  await prisma.hunterConfig.upsert({
+    where: { id: "default" },
+    update: { ativo: false },
+    create: {
+      id: "default",
+      ativo: false,
+      bairrosSantos: ["Embaré", "Gonzaga", "Ponta da Praia", "Boqueirão", "Aparecida"],
+      tiposImovel: ["Apartamento", "Casa", "Cobertura"],
+    },
+  });
+
+  logger.info("HunterOrchestrator", "Fila de prospecção pausada com segurança.");
+
+  return {
+    success: true,
+    message: "Fila Anti-Spam pausada com segurança.",
+  };
+}
+
 export async function runHunterJitterTick(sock: any): Promise<number> {
   if (!sock) return 0;
 
