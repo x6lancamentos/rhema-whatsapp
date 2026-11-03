@@ -1,19 +1,41 @@
 version: '3.8'
 
+networks:
+  internal-net:
+    driver: bridge
+
 services:
   db:
-    image: mysql:8.0
+    image: postgres:17-alpine
     container_name: wa-akg-db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-wa_akg}
-    ports:
-      - "3306:3306"
+      POSTGRES_USER: ${POSTGRES_USER:-wa_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_in_production}
+      POSTGRES_DB: ${POSTGRES_DB:-wa_akg}
+    # Sem mapeamento de portas para 0.0.0.0 — comunicação restrita à rede interna
+    networks:
+      - internal-net
     volumes:
-      - mysql_data:/var/lib/mysql
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wa_user} -d ${POSTGRES_DB:-wa_akg}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: wa-akg-redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    # Sem mapeamento de portas públicas 0.0.0.0
+    networks:
+      - internal-net
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,10 +47,15 @@ services:
     container_name: wa-akg-app
     restart: always
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    networks:
+      - internal-net
     environment:
-      - DATABASE_URL=mysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/${MYSQL_DATABASE:-wa_akg}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-wa_user}:${POSTGRES_PASSWORD:-change_in_production}@db:5432/${POSTGRES_DB:-wa_akg}?schema=public
+      - REDIS_URL=redis://redis:6379
       - AUTH_SECRET=${AUTH_SECRET}
+      - API_SECRET_KEY=${API_SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - BASE_URL=${BASE_URL:-http://localhost:3000}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NODE_ENV=production
@@ -39,19 +66,24 @@ services:
       - BAILEYS_LOG_LEVEL=${BAILEYS_LOG_LEVEL:-error}
       - NEXT_PUBLIC_SWAGGER_USERNAME=${NEXT_PUBLIC_SWAGGER_USERNAME:-admin}
       - NEXT_PUBLIC_SWAGGER_PASSWORD=${NEXT_PUBLIC_SWAGGER_PASSWORD}
-      - NEXT_PUBLIC_SWAGGER_ENABLED=${NEXT_PUBLIC_SWAGGER_ENABLED:-true}
-      - TZ=${TZ:-Asia/Jakarta}
-      - LOCALE=${LOCALE:-id-ID}
+      - NEXT_PUBLIC_SWAGGER_ENABLED=${NEXT_PUBLIC_SWAGGER_ENABLED:-false}
+      - TZ=${TZ:-America/Sao_Paulo}
+      - LOCALE=${LOCALE:-pt-BR}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - EEMOVEL_USERNAME=${EEMOVEL_USERNAME}
+      - EEMOVEL_PASSWORD=${EEMOVEL_PASSWORD}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - app_data:/app/data
       - uploads_data:/app/uploads
 
 volumes:
-  mysql_data:
+  pgdata:
+  redisdata:
   app_data:
   uploads_data:

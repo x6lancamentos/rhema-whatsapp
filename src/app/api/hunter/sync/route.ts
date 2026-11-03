@@ -1,35 +1,75 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { collectEemovelOpportunities } from "@/lib/hunter/eemovel-service";
 import { prisma } from "@/lib/prisma";
+import { requireApiAuth } from "@/lib/api-auth-guard";
 
-export async function POST(req: Request) {
+const syncOptionsSchema = z
+  .object({
+    bairros: z.union([z.string(), z.array(z.string())]).optional(),
+    valorMin: z.coerce.number().positive().optional(),
+    valorMax: z.coerce.number().positive().optional(),
+    limite: z.coerce.number().int().positive().max(100).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.valorMin && data.valorMax) {
+        return data.valorMax >= data.valorMin;
+      }
+      return true;
+    },
+    {
+      message: "valorMax deve ser maior ou igual a valorMin",
+      path: ["valorMax"],
+    }
+  );
+
+export async function POST(req: NextRequest) {
+  // 1. Guard de Autenticação & Autorização
+  const { error } = await requireApiAuth(req, ["ADMIN", "SUPERADMIN"]);
+  if (error) return error;
+
   try {
-    const body = await req.json().catch(() => ({}));
-    const { bairros, valorMin, valorMax, limite } = body;
+    const rawBody = await req.json().catch(() => ({}));
+    const parseResult = syncOptionsSchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Parâmetros de sincronização inválidos",
+          issues: parseResult.error.issues,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { bairros, valorMin, valorMax, limite } = parseResult.data;
+    const bairrosList = bairros ? (Array.isArray(bairros) ? bairros : [bairros]) : undefined;
 
     // Se parâmetros foram passados, salva no config default
-    if (bairros || valorMin || valorMax || limite) {
+    if (bairrosList || valorMin || valorMax || limite) {
       await prisma.hunterConfig.upsert({
         where: { id: "default" },
         update: {
-          bairrosSantos: bairros ? (Array.isArray(bairros) ? bairros : [bairros]) : undefined,
-          valorMin: valorMin ? Number(valorMin) : undefined,
-          valorMax: valorMax ? Number(valorMax) : undefined,
-          limiteDiario: limite ? Number(limite) : undefined,
+          bairrosSantos: bairrosList,
+          valorMin,
+          valorMax,
+          limiteDiario: limite,
         },
         create: {
           id: "default",
-          bairrosSantos: bairros ? (Array.isArray(bairros) ? bairros : [bairros]) : ["Embaré", "Gonzaga", "Ponta da Praia", "Boqueirão", "Aparecida"],
+          bairrosSantos: bairrosList || ["Embaré", "Gonzaga", "Ponta da Praia", "Boqueirão", "Aparecida"],
           tiposImovel: ["Apartamento", "Casa", "Cobertura"],
-          valorMin: valorMin ? Number(valorMin) : 350000,
-          valorMax: valorMax ? Number(valorMax) : 2500000,
-          limiteDiario: limite ? Number(limite) : 15,
+          valorMin: valorMin ?? 350000,
+          valorMax: valorMax ?? 2500000,
+          limiteDiario: limite ?? 15,
         },
       });
     }
 
     const results = await collectEemovelOpportunities({
-      bairros,
+      bairros: bairrosList,
       valorMin,
       valorMax,
       limite,

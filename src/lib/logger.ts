@@ -60,8 +60,40 @@ function formatTag(tag: string): string {
     return `${c.bold}${c.cyan}[${tag}]${c.reset}`;
 }
 
+/**
+ * Sanitiza e mascara dados sensíveis (LGPD, senhas, tokens, telefones, CPFs) antes de exibir no log
+ */
+export function maskSensitiveData(input: string): string {
+    if (!input || typeof input !== "string") return input;
+
+    let sanitized = input;
+
+    // 1. Mascara CPFs no formato XXX.XXX.XXX-XX
+    sanitized = sanitized.replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, "[CPF PROTEGIDO]");
+
+    // 2. Mascara credenciais / senhas / tokens / secrets / chaves
+    sanitized = sanitized.replace(
+        /(["']?(?:password|senha|secret|token|apiKey|api_key|authorization)["']?\s*[:=]\s*["']?)([^"',\s\}]+)(["']?)/gi,
+        "$1[CONFIDENCIAL/REMOVIDO]$3"
+    );
+
+    // 3. Mascara tokens Bearer explícitos em headers ou strings
+    sanitized = sanitized.replace(/Bearer\s+[A-Za-z0-9_\-\.]{15,}/gi, "Bearer [TOKEN PROTEGIDO]");
+
+    // 4. Mascara números de telefone completos (preserva DDD para contexto operacional, ex: 13 99***-**12)
+    sanitized = sanitized.replace(
+        /(?:\+?55\s?)?(?:\(?([1-9]{2})\)?[\s-]?)?(9[0-9]{4})[\s-]?([0-9]{4})/g,
+        (match, ddd, p1, p2) => {
+            const prefix = ddd ? `(${ddd}) ` : "";
+            return `${prefix}${p1.slice(0, 2)}***-**${p2.slice(-2)}`;
+        }
+    );
+
+    return sanitized;
+}
+
 function formatArgs(args: any[]): string {
-    return args
+    const raw = args
         .map((a) => {
             if (a instanceof Error) return `${a.message}`;
             if (typeof a === "object") {
@@ -70,6 +102,8 @@ function formatArgs(args: any[]): string {
             return String(a);
         })
         .join(" ");
+
+    return maskSensitiveData(raw);
 }
 
 export const logger = {

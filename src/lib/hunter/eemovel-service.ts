@@ -33,8 +33,14 @@ let sessionCache: EemovelSessionCache | null = null;
  * Autentica no Keycloak do eEmovel e retorna a página / sessão logada
  */
 export async function authenticateEemovel(): Promise<{ browser: Browser; page: Page }> {
-  const username = process.env.EEMOVEL_USERNAME || "adm@rhemaimobiliaria.com.br";
-  const password = process.env.EEMOVEL_PASSWORD || "Mesa364.";
+  const username = process.env.EEMOVEL_USERNAME;
+  const password = process.env.EEMOVEL_PASSWORD;
+
+  if (!username || !password) {
+    throw new Error(
+      "Configuração de segurança ausente: EEMOVEL_USERNAME e EEMOVEL_PASSWORD são obrigatórios no .env"
+    );
+  }
 
   logger.info("EemovelService", `Iniciando autenticação no eEmovel para ${username}...`);
 

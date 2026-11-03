@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { AuthenticationCreds, AuthenticationState, BufferJSON, initAuthCreds, SignalDataTypeMap } from "@whiskeysockets/baileys";
 import { logger } from "@/lib/logger";
+import { encryptSessionData, decryptSessionData } from "@/lib/crypto";
 
-export const usePrismaAuthState = async (sessionId: string): Promise<{ state: AuthenticationState, saveCreds: () => Promise<void> }> => {
+export const usePrismaAuthState = async (sessionId: string): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> => {
     
-    // Helper to read JSON with Buffer handling
+    // Helper to read JSON with Buffer handling & transparent AES-256-GCM decryption
     const readData = async (type: string, id: string) => {
         try {
             const key = `${type}-${id}`;
@@ -12,7 +13,8 @@ export const usePrismaAuthState = async (sessionId: string): Promise<{ state: Au
                 where: { sessionId_key: { sessionId, key } }
             });
             if (data && data.value) {
-                return JSON.parse(JSON.stringify(data.value), BufferJSON.reviver);
+                const decryptedValue = decryptSessionData(data.value);
+                return JSON.parse(JSON.stringify(decryptedValue), BufferJSON.reviver);
             }
             return null;
         } catch (error) {
@@ -21,16 +23,17 @@ export const usePrismaAuthState = async (sessionId: string): Promise<{ state: Au
         }
     };
 
-    // Helper to write data
+    // Helper to write data with authenticated AES-256-GCM encryption
     const writeData = async (type: string, id: string, data: any) => {
         try {
             const key = `${type}-${id}`;
-            const value = JSON.parse(JSON.stringify(data, BufferJSON.replacer));
+            const rawValue = JSON.parse(JSON.stringify(data, BufferJSON.replacer));
+            const encryptedValue = encryptSessionData(rawValue);
             
             await prisma.authState.upsert({
                 where: { sessionId_key: { sessionId, key } },
-                create: { sessionId, key, value },
-                update: { value }
+                create: { sessionId, key, value: encryptedValue as any },
+                update: { value: encryptedValue as any }
             });
         } catch (error) {
              logger.error("Auth", 'Error writing auth state:', error);
@@ -46,8 +49,7 @@ export const usePrismaAuthState = async (sessionId: string): Promise<{ state: Au
         } catch (error) {
             // ignore
         }
-    }
-
+    };
 
     const creds: AuthenticationCreds = (await readData('creds', 'me')) || initAuthCreds();
 
@@ -90,5 +92,5 @@ export const usePrismaAuthState = async (sessionId: string): Promise<{ state: Au
         saveCreds: async () => {
             await writeData('creds', 'me', creds);
         }
-    }
-}
+    };
+};

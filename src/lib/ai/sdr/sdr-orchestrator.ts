@@ -9,6 +9,7 @@ import { evaluateAndRecordLeadLearning } from "./sdr-learner";
 import { callModelRouter } from "../model-router";
 import { SDR_LEAD_SYSTEM_PROMPT, SDR_OWNER_SYSTEM_PROMPT } from "./sdr-prompts";
 import { isWithinBusinessHours, scheduleNextFollowup } from "./sdr-followup";
+import { wrapExternalUserMessage } from "@/lib/ai/prompt-sanitizer";
 
 export interface InboundSdrResult {
   handled: boolean;
@@ -269,10 +270,10 @@ export async function handleInboundSdrMessage(params: {
 async function handleLeadTurn(params: { sock: any; conv: any; sdrLead: any; text: string }): Promise<InboundSdrResult> {
   const { sock, conv, sdrLead, text } = params;
 
-  // Histórico em ordem cronológica
+  // Histórico em ordem cronológica com sanitização de mensagens recebidas
   const history = [...(conv.messages || [])].reverse().map((m: any) => ({
     role: m.direction === "OUT" ? ("assistant" as const) : ("user" as const),
-    content: m.content,
+    content: m.direction === "OUT" ? m.content : wrapExternalUserMessage(m.content),
   }));
 
   const imovelSnapshot = sdrLead.imovelSnapshot as any;
@@ -303,12 +304,13 @@ ${alternativas.map((a, i) => `${i + 1}. Cód. ${a.codigo} - ${a.titulo} (${a.bai
 Caso o cliente prefira, ofereça também conectar diretamente com nosso especialista do bairro para opções off-market exclusivas.`;
   }
 
+  const sanitizedLeadMessage = wrapExternalUserMessage(text);
   const result = await callModelRouter({
     task: "LEAD_CHAT",
     messages: [
       { role: "system", content: `${SDR_LEAD_SYSTEM_PROMPT}\n\n${contextPrompt}` },
       ...history,
-      { role: "user", content: text },
+      { role: "user", content: sanitizedLeadMessage },
     ],
     jsonMode: true,
   });
@@ -366,15 +368,16 @@ async function handleOwnerTurn(params: { sock: any; conv: any; sdrLead: any; tex
 
   const history = [...(conv.messages || [])].reverse().map((m: any) => ({
     role: m.direction === "OUT" ? ("assistant" as const) : ("user" as const),
-    content: m.content,
+    content: m.direction === "OUT" ? m.content : wrapExternalUserMessage(m.content),
   }));
 
+  const sanitizedOwnerMessage = wrapExternalUserMessage(text);
   const result = await callModelRouter({
     task: "OWNER_CHAT",
     messages: [
       { role: "system", content: SDR_OWNER_SYSTEM_PROMPT },
       ...history,
-      { role: "user", content: text },
+      { role: "user", content: sanitizedOwnerMessage },
     ],
     jsonMode: true,
   });

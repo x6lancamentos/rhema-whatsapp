@@ -5,11 +5,32 @@ import { HUNTER_SYSTEM_PROMPT } from "./hunter-prompts";
 import { createFichaDraft } from "./ficha-bridge";
 import { sendHumanBubblesWithTyping } from "../ai/sdr/sdr-orchestrator";
 import { waManager } from "@/modules/whatsapp/manager";
+import { wrapExternalUserMessage } from "@/lib/ai/prompt-sanitizer";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Número do Gerente Comercial (Brunno Anastácio)
 const BRUNNO_WHATSAPP_JID = process.env.BRUNNO_WHATSAPP_JID || "556293856483@s.whatsapp.net";
+
+// Mutex e controle de cadência anti-ban da Fila Hunter
+let isJitterRunning = false;
+let consecutiveSentCount = 0;
+let batchCooldownUntil = 0;
+
+export function getHunterJitterState() {
+  return {
+    isJitterRunning,
+    consecutiveSentCount,
+    batchCooldownUntil,
+    inCooldown: Date.now() < batchCooldownUntil,
+  };
+}
+
+export function resetHunterJitterStateForTesting() {
+  isJitterRunning = false;
+  consecutiveSentCount = 0;
+  batchCooldownUntil = 0;
+}
 
 /**
  * 1. Processa a Fila Anti-Spam com Jitter Randômico (45s a 180s)
@@ -153,74 +174,111 @@ export async function pauseHunterQueue(): Promise<{ success: boolean; message: s
 export async function runHunterJitterTick(sock: any): Promise<number> {
   if (!sock) return 0;
 
-  // Checa horário comercial seguro para prospecção fria (09:30 às 17:30)
-  const now = new Date();
-  const hours = now.getHours();
-  if (hours < 9 || hours >= 18) {
+  // 1. Mutex Anti-Concorrência: Garante apenas uma execução de jitter por vez
+  if (isJitterRunning) {
+    logger.debug("HunterOrchestrator", "Tick ignorado: execução de Jitter já em andamento (Mutex ativo).");
     return 0;
   }
 
-  const config = await prisma.hunterConfig.findUnique({ where: { id: "default" } });
-  if (config && !config.ativo) return 0;
-
-  // Busca uma oportunidade aguardando disparo
-  const opp = await prisma.hunterOpportunity.findFirst({
-    where: {
-      status: { in: ["DISCOVERED", "QUEUED"] },
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
-  if (!opp) return 0;
-
-  // Calcula intervalo randômico de jitter seguro
-  const delayMin = config?.delayMinSeg || 45;
-  const delayMax = config?.delayMaxSeg || 180;
-  const jitterSec = Math.floor(delayMin + Math.random() * (delayMax - delayMin));
-
-  logger.info(
-    "HunterOrchestrator",
-    `Preparando abordagem com Jitter Anti-Spam (${jitterSec}s) para ${opp.proprietarioNome} (${opp.bairro})...`
-  );
-
-  const valorFormatado = opp.valorPretendido.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-  let bubble1 = `Olá ${opp.proprietarioNome}, tudo bem? Aqui é da Rhema Imóveis em Santos.`;
-  let bubble2 = `Vi seu anúncio do ${opp.tipoImovel.toLowerCase()} no ${opp.bairro}. Estamos com compradores em carteira buscando essa tipologia na sua rua. Podemos levar interessados com agendamento prévio?`;
-
-  if (opp.tipoOportunidade === "REDUCAO_PRECO") {
-    bubble2 = `Acompanhamos o mercado de Santos e vimos a recente atualização no valor do seu ${opp.tipoImovel.toLowerCase()} no ${opp.bairro} (${valorFormatado}). Temos clientes buscando nessa faixa exata. Aceitaria apresentar aos nossos compradores?`;
-  } else if (opp.tipoOportunidade === "PARADO_LONGO_PRAZO") {
-    bubble2 = `Vi que o seu ${opp.tipoImovel.toLowerCase()} no ${opp.bairro} está anunciado há algum tempo. Na Rhema trabalhamos com um programa de Exclusividade Premium de 90 dias com fotos profissionais e alta visibilidade. Gostaria de conhecer nossa proposta?`;
+  // 2. Cooldown de Lote: Pausa obrigatória de 15 minutos a cada 5 envios sucessivos
+  if (Date.now() < batchCooldownUntil) {
+    const remainingMin = Math.ceil((batchCooldownUntil - Date.now()) / (60 * 1000));
+    logger.info("HunterOrchestrator", `Cooldown anti-ban ativo (5 envios consecutivos atingidos). Aguardando mais ${remainingMin}min.`);
+    return 0;
   }
 
-  // Atualiza status para APPROACHING antes do envio
-  await prisma.hunterOpportunity.update({
-    where: { id: opp.id },
-    data: { status: "APPROACHING" },
-  });
+  // 3. Janela de Operação Comercial: Bloqueia prospecção fria fora de 09:30 às 17:30
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const startCommercial = 9 * 60 + 30; // 09:30
+  const endCommercial = 17 * 60 + 30;   // 17:30
 
-  // Envia bolhas humanas com simulação de digitação
-  await sendHumanBubblesWithTyping({
-    sock,
-    toJid: opp.proprietarioJid,
-    bubbles: [bubble1, bubble2],
-    modelUsed: "hunter-outbound-jitter",
-  });
+  if (currentMinutes < startCommercial || currentMinutes >= endCommercial) {
+    logger.debug("HunterOrchestrator", "Fora da janela comercial de prospecção permitida (09:30 às 17:30).");
+    return 0;
+  }
 
-  // Registra no log de cadência
-  await prisma.hunterCadenceLog.create({
-    data: {
-      opportunityId: opp.id,
-      direcao: "OUT",
-      tipo: "INITIAL_PITCH",
-      conteudo: `${bubble1}\n${bubble2}`,
-      analiseCoach: { tipoAbordagem: opp.tipoOportunidade, jitterSegundos: jitterSec },
-    },
-  });
+  isJitterRunning = true;
+  try {
+    const config = await prisma.hunterConfig.findUnique({ where: { id: "default" } });
+    if (config && !config.ativo) return 0;
 
-  logger.info("HunterOrchestrator", `Abordagem enviada com sucesso para ${opp.proprietarioNome} (${opp.proprietarioJid}).`);
-  return 1;
+    // Busca uma oportunidade aguardando disparo
+    const opp = await prisma.hunterOpportunity.findFirst({
+      where: {
+        status: { in: ["DISCOVERED", "QUEUED"] },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (!opp) return 0;
+
+    // Calcula intervalo randômico de jitter seguro
+    const delayMin = config?.delayMinSeg || 45;
+    const delayMax = config?.delayMaxSeg || 180;
+    const jitterSec = Math.floor(delayMin + Math.random() * (delayMax - delayMin));
+
+    logger.info(
+      "HunterOrchestrator",
+      `Aguardando Jitter Anti-Spam real bloqueante (${jitterSec}s) antes de disparar para ${opp.proprietarioNome} (${opp.bairro})...`
+    );
+
+    // 4. Jitter Real Bloqueante: Suspende a execução pelo tempo sorteado antes de prosseguir
+    await sleep(jitterSec * 1000);
+
+    const valorFormatado = opp.valorPretendido.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    let bubble1 = `Olá ${opp.proprietarioNome}, tudo bem? Aqui é da Rhema Imóveis em Santos.`;
+    let bubble2 = `Vi seu anúncio do ${opp.tipoImovel.toLowerCase()} no ${opp.bairro}. Estamos com compradores em carteira buscando essa tipologia na sua rua. Podemos levar interessados com agendamento prévio?`;
+
+    if (opp.tipoOportunidade === "REDUCAO_PRECO") {
+      bubble2 = `Acompanhamos o mercado de Santos e vimos a recente atualização no valor do seu ${opp.tipoImovel.toLowerCase()} no ${opp.bairro} (${valorFormatado}). Temos clientes buscando nessa faixa exata. Aceitaria apresentar aos nossos compradores?`;
+    } else if (opp.tipoOportunidade === "PARADO_LONGO_PRAZO") {
+      bubble2 = `Vi que o seu ${opp.tipoImovel.toLowerCase()} no ${opp.bairro} está anunciado há algum tempo. Na Rhema trabalhamos com um programa de Exclusividade Premium de 90 dias com fotos profissionais e alta visibilidade. Gostaria de conhecer nossa proposta?`;
+    }
+
+    // Atualiza status para APPROACHING antes do envio
+    await prisma.hunterOpportunity.update({
+      where: { id: opp.id },
+      data: { status: "APPROACHING" },
+    });
+
+    // Envia bolhas humanas com simulação de digitação
+    await sendHumanBubblesWithTyping({
+      sock,
+      toJid: opp.proprietarioJid,
+      bubbles: [bubble1, bubble2],
+      modelUsed: "hunter-outbound-jitter",
+    });
+
+    // Registra no log de cadência
+    await prisma.hunterCadenceLog.create({
+      data: {
+        opportunityId: opp.id,
+        direcao: "OUT",
+        tipo: "INITIAL_PITCH",
+        conteudo: `${bubble1}\n${bubble2}`,
+        analiseCoach: { tipoAbordagem: opp.tipoOportunidade, jitterSegundos: jitterSec },
+      },
+    });
+
+    logger.info("HunterOrchestrator", `Abordagem enviada com sucesso para ${opp.proprietarioNome} (${opp.proprietarioJid}).`);
+
+    // 5. Cooldown de Lote: Após 5 envios, ativa pausa de 15 minutos
+    consecutiveSentCount++;
+    if (consecutiveSentCount >= 5) {
+      logger.info(
+        "HunterOrchestrator",
+        "Lote de 5 envios consecutivos atingido. Acionando cooldown de 15 minutos para proteção de ban do WhatsApp."
+      );
+      batchCooldownUntil = Date.now() + 15 * 60 * 1000;
+      consecutiveSentCount = 0;
+    }
+
+    return 1;
+  } finally {
+    isJitterRunning = false;
+  }
 }
 
 /**
@@ -268,13 +326,16 @@ export async function handleInboundHunterMessage(params: {
     content: m.conteudo,
   }));
 
+  // Sanitiza a mensagem do usuário contra Prompt Injection
+  const sanitizedUserMessage = wrapExternalUserMessage(text);
+
   // Executa o Modelo Cognitivo do Hunter
   const result = await callModelRouter({
     task: "OWNER_CHAT",
     messages: [
       { role: "system", content: HUNTER_SYSTEM_PROMPT },
       ...history,
-      { role: "user", content: text },
+      { role: "user", content: sanitizedUserMessage },
     ],
     jsonMode: true,
   });

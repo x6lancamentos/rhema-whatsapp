@@ -1,8 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { startHunterQueue, pauseHunterQueue } from "@/lib/hunter/hunter-orchestrator";
 import { prisma } from "@/lib/prisma";
+import { requireApiAuth } from "@/lib/api-auth-guard";
 
-export async function GET() {
+const queueActionSchema = z.object({
+  action: z.enum(["start", "pause"]),
+});
+
+export async function GET(req: NextRequest) {
+  const { error } = await requireApiAuth(req, ["ADMIN", "SUPERADMIN"]);
+  if (error) return error;
+
   try {
     const [config, queuedCount, discoveredCount] = await Promise.all([
       prisma.hunterConfig.findUnique({ where: { id: "default" } }),
@@ -21,10 +30,26 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const { error } = await requireApiAuth(req, ["ADMIN", "SUPERADMIN"]);
+  if (error) return error;
+
   try {
-    const body = await req.json().catch(() => ({}));
-    const action = body.action || "start";
+    const rawBody = await req.json().catch(() => ({}));
+    const parseResult = queueActionSchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Ação inválida. Use 'start' ou 'pause'.",
+          issues: parseResult.error.issues,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { action } = parseResult.data;
 
     if (action === "pause") {
       const res = await pauseHunterQueue();
@@ -37,4 +62,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
-
